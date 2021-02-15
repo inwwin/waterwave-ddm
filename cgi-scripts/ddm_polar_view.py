@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/pw443/.pyenv/versions/3.9.1/bin/python3.9
 import numpy as np
 from waterwave_ddm.ddm_polar_inspect import map_to_polar, ddm_polar_inspection_animation
 import json
