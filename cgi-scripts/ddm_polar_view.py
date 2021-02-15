@@ -4,6 +4,7 @@ from waterwave_ddm.ddm_polar_inspect import map_to_polar, ddm_polar_inspection_a
 import json
 import cgi
 import cgitb
+import os.path as p
 
 
 def get_cgi_param(params, key, default=None, mapper=None):
@@ -11,14 +12,14 @@ def get_cgi_param(params, key, default=None, mapper=None):
         mapper = lambda x: x  # noqa: E731
     try:
         return mapper(params.get(key, (default,))[0])
-    except ValueError:
+    except (TypeError, ValueError):
         return default
 
 
 def main():
     # DIR_OF_THIS_SCRIPT = p.abspath(p.dirname(__file__))
     # config_path = p.join(DIR_OF_THIS_SCRIPT, '.config.json')
-    config_path = '~/.config/waterwave_ddm/config.json'
+    config_path = p.expanduser('~/.config/waterwave_ddm/config.json')
     try:
         with open(config_path, 'r') as config_file:
             config: dict = json.load(config_file)
@@ -27,7 +28,7 @@ def main():
         print()
         print('No config file')
         return
-    cgitb.enable(display=0, logdir=config.get('log_path', '~/.log/waterwave_ddm.log'))
+    cgitb.enable(display=0, logdir=config.get('log_path', p.expanduser('~/.log/waterwave_ddm.log')))
     ddm_data_map: dict = config['data_map']
     default_interval = config.get('default_interval', 200)
     default_max_ti = config.get('default_max_ti', 50)
