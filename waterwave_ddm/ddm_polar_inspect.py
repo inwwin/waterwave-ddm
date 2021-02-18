@@ -2,28 +2,7 @@
 import numpy as np
 # import json
 from typing import Tuple
-
-
-def polar_space(shape: Tuple[int, ...]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    # Init a meshgrid of cartesian coordinates
-    centre = (shape[0] // 2, 0)
-    x_i = np.arange(-centre[0], +centre[0] + 1, +1)
-    x_j = np.arange(0, shape[1])
-    x_i = np.fft.ifftshift(x_i)  # so that our map is compatible with x
-    xm_i, xm_j = np.meshgrid(x_i, x_j, indexing='ij')
-
-    # Radius, angle function
-    r = np.sqrt(xm_i**2 + xm_j**2)
-    a = np.arctan2(xm_i, xm_j)
-    # Adjust domain
-    a[a > np.pi] -= 2 * np.pi
-    # This makes our angle measured anticlockwise with
-    # +x_j => 0 degrees
-    # +x_i => -pi/2 degrees (bottom)
-    # -x_i => +pi/2 degrees (top)
-    a *= -1
-
-    return r, a, xm_i, xm_j
+from waterwave_ddm.models import polar_space, models, ISFModel
 
 
 def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_radius: float) -> \
@@ -100,7 +79,8 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
     return result, median_angle, median_radius, average_angle, average_radius
 
 
-def ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, ddm_polar, max_ti=100, interval=200):
+def ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, median_angle, median_radius, ddm_polar,
+                                   max_ti=100, interval=200, model=None, model_params=None, radial_bin_size=2):
     """Create lag-time animation of image structure function when viewed over one radius or one angle only"""
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
@@ -108,28 +88,46 @@ def ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, ddm
     if mode not in ('r', 'a'):
         raise ValueError('mode must be \'r\' or \'a\'')
 
+    if model:
+        model_resolution = 50
+        model_xdata = np.empty((3, model_resolution))
+        model_xdata[2] = 0
+
     fig, ax = plt.subplots()
     ti_indicator = fig.text(.02, .98, 'ti = 0', verticalalignment='top')
     if mode == 'a':
         ri = rai
-        line, = ax.plot(average_angle[:, ri], ddm_polar[:, ri, 0])
+        line_data, = ax.plot(average_angle[:, ri], ddm_polar[:, ri, 0])
         ax.set_ylim(0, np.nanmax(ddm_polar[:, ri, :]))
+        if model:
+            angular_space = np.linspace(-np.pi / 2, +np.pi / 2, model_resolution)
+            deg_angular_space = np.rad2deg(angular_space)
+            model_xdata[0] = median_radius[ri]
+            model_xdata[1] = angular_space
+            line_nominal, = ax.plot(deg_angular_space, model.func(model_xdata, *model_params))
     else:
         ai = rai
-        line, = ax.plot(average_radius[ai, :], ddm_polar[ai, :, 0])
+        line_data, = ax.plot(average_radius[ai, :], ddm_polar[ai, :, 0])
         ax.set_ylim(0, np.nanmax(ddm_polar[ai, :, :]))
+        if model:
+            radial_space = np.linspace(0, median_radius[-1] + radial_bin_size / 2., model_resolution)
+            model_xdata[0] = radial_space
+            model_xdata[1] = median_angle[ai]
+            line_nominal, = ax.plot(radial_space, model.func(model_xdata, *model_params))
 
     def animation_function(ti, mode):
         if mode == 'a':
-            line.set_ydata(ddm_polar[:, rai, ti])
+            line_data.set_ydata(ddm_polar[:, rai, ti])
         else:
-            line.set_ydata(ddm_polar[rai, :, ti])
+            line_data.set_ydata(ddm_polar[rai, :, ti])
+        if model:
+            model_xdata[2] = ti
+            line_nominal.set_ydata(model.func(model_xdata, *model_params))
         ti_indicator.set_text(f"ti = {ti}")
-        return line, ti_indicator,
 
     animation = FuncAnimation(fig, animation_function, fargs=mode, interval=interval, blit=False, frames=max_ti)
 
-    return animation, fig, ax, line, ti_indicator
+    return animation, fig, ax, line_data, ti_indicator, line_nominal
 
 
 def main():
@@ -138,6 +136,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--angular_bins', type=int, default=18)
     parser.add_argument('-p', '--radial_bin_size', type=int, default=2)
+    parser.add_argument('-m', '--fit', type=int, default=None, nargs=2, metavar=('model_number', 'cutoff_time'))
     parser.add_argument('-i', '--interactive', action='store_true')
     parser.add_argument('-o', '--out', type=pathlib.Path, default=False)
     # parser.add_argument('-ao', '--animation_out', type=pathlib.Path, default=False)
@@ -153,6 +152,22 @@ def main():
     result, median_angle, median_radius, average_angle, average_radius = \
         map_to_polar(ddm_array, params.angular_bins, params.radial_bin_size, ddm_array.shape[1] - 1)
     print('polar_result.shape: ', result.shape)
+
+    if params.fit:
+        model = models[params.fit[0] - 1]
+        cut_ddm_array = ddm_array[:, :, :params.fit[1]]
+        print('cut_ddm_array.shape:', cut_ddm_array.shape)
+        xdata, ydata = ISFModel.prepare_xydata(cut_ddm_array)
+        params_optimized, params_covariance = model.fit_model(xdata, ydata)
+        params_optimized = tuple(params_optimized)
+        print(params_optimized)
+        # nominal_ddm_array = model.nominal(result.shape, params_optimized)
+        # moninal_result, *_ = map_to_polar(nominal_ddm_array, params.angular_bins, params.radial_bin_size,
+        #                                   nominal_ddm_array.shape[1] -1)
+        # print('nominal_polar_result.shape:', nominal_result.shape)
+    else:
+        model = None
+        params_optimized = None
 
     if params.out:
         try:
@@ -197,7 +212,9 @@ def main():
                 print('Inspecting radial view at median angle = ', median_angle[rai])
 
             animation, fig, *_ = \
-                ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, result, max_ti, interval)
+                ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, median_angle, median_radius,
+                                               result, max_ti, interval, model, params_optimized,
+                                               params.radial_bin_size)
 
             fig.show()
             # if not html_out:

@@ -124,7 +124,7 @@ def _foreground_v2_jac(x, *params):
     return jac
 
 
-def model1_func(x, *params):
+def model1_func(x, *params) -> np.ndarray:
     """
     The model defined as I_1 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -138,7 +138,7 @@ def model1_func(x, *params):
     return _background_v1(x, *params) + _foreground_v1(x, *params)
 
 
-def model1_jac(x, *params):
+def model1_jac(x, *params) -> np.ndarray:
     """
     The Jacobian of the model defined as I_1 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -152,7 +152,7 @@ def model1_jac(x, *params):
     return _background_v1_jac(x, *params) + _foreground_v1_jac(x, *params)
 
 
-def model2_func(x, *params):
+def model2_func(x, *params) -> np.ndarray:
     """
     The model defined as I_2 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -166,7 +166,7 @@ def model2_func(x, *params):
     return _background_v2(x, *params) + _foreground_v1(x, *params)
 
 
-def model2_jac(x, *params):
+def model2_jac(x, *params) -> np.ndarray:
     """
     The Jacobian of the model defined as I_2 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -180,7 +180,7 @@ def model2_jac(x, *params):
     return _background_v2_jac(x, *params) + _foreground_v1_jac(x, *params)
 
 
-def model3_func(x, *params):
+def model3_func(x, *params) -> np.ndarray:
     """
     The model defined as I_3 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -194,7 +194,7 @@ def model3_func(x, *params):
     return _background_v1(x, *params) + _foreground_v2(x, *params)
 
 
-def model3_jac(x, *params):
+def model3_jac(x, *params) -> np.ndarray:
     """
     The Jacobian of the model defined as I_3 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -208,7 +208,7 @@ def model3_jac(x, *params):
     return _background_v1_jac(x, *params) + _foreground_v2_jac(x, *params)
 
 
-def model4_func(x, *params):
+def model4_func(x, *params) -> np.ndarray:
     """
     The model defined as I_4 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -222,7 +222,7 @@ def model4_func(x, *params):
     return _background_v2(x, *params) + _foreground_v2(x, *params)
 
 
-def model4_jac(x, *params):
+def model4_jac(x, *params) -> np.ndarray:
     """
     The Jacobian of the model defined as I_4 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -239,7 +239,7 @@ def model4_jac(x, *params):
 # Default params for scipy.optimize.curve_fit
 modelv1_params_initial_guess = (2, -1, 1, 1, 1, 1, 0)
 modelv1_params_lower_bound = (0, -20, 0, 0, 0, 0, -np.pi / 2)
-modelv1_params_upper_bound = (20, +20, 100, 100, 100, 100, +np.pi / 2)
+modelv1_params_upper_bound = (20, +20, 100, 5, 100, 100, +np.pi / 2)
 model1_params_initial_guess = modelv1_params_initial_guess
 model2_params_initial_guess = modelv1_params_initial_guess
 model3_params_initial_guess = modelv1_params_initial_guess
@@ -293,20 +293,51 @@ class ISFModel:
         return params_optimized, params_covariance
 
     @staticmethod
-    def prepare_xydata(ddm_array: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Return xdata and ydata prepared according to scipy.optimize.curve_fit"""
-        from waterwave_ddm.ddm_polar_inspect import polar_space
-        r, a, *_ = polar_space(ddm_array.shape)
-        tau = np.arange(0, ddm_array.shape[2])
+    def prepare_xdata(shape: Tuple[int, int, int]) -> np.ndarray:
+        r, a, *_ = polar_space(shape)
+        tau = np.arange(0, shape[2])
 
-        xdata = np.empty((3, ddm_array.size))
+        size = shape[0] * shape[1] * shape[2]
+        xdata = np.empty((3, size))
         xdata[0] = np.repeat(r.flatten('C'), tau.size)
         xdata[1] = np.repeat(a.flatten('C'), tau.size)
         xdata[2] = np.tile(tau, r.size)
+        return xdata
 
+    @staticmethod
+    def prepare_xydata(ddm_array: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Return xdata and ydata prepared according to scipy.optimize.curve_fit"""
         ydata = ddm_array.flatten('C')
+        return ISFModel.prepare_xdata(ddm_array.shape), ydata
 
-        return xdata, ydata
+    def nominal(self, shape: Tuple[int, int, int], params) -> np.ndarray:
+        """Return the nominal ISF as modelled by the given params in the required shape"""
+        params = tuple(params)
+        xdata = self.prepare_xdata(shape)
+        ynominal = self.func(xdata, *params)
+        return ynominal.reshape(shape)
 
 
 models = [ISFModel(number, *params) for number, params in enumerate(models_zip, start=1)]
+
+
+def polar_space(shape: Tuple[int, ...]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    # Init a meshgrid of cartesian coordinates
+    centre = (shape[0] // 2, 0)
+    x_i = np.arange(-centre[0], +centre[0] + 1, +1)
+    x_j = np.arange(0, shape[1])
+    x_i = np.fft.ifftshift(x_i)  # so that our map is compatible with x
+    xm_i, xm_j = np.meshgrid(x_i, x_j, indexing='ij')
+
+    # Radius, angle function
+    r = np.sqrt(xm_i**2 + xm_j**2)
+    a = np.arctan2(xm_i, xm_j)
+    # Adjust domain
+    a[a > np.pi] -= 2 * np.pi
+    # This makes our angle measured anticlockwise with
+    # +x_j => 0 degrees
+    # +x_i => -pi/2 degrees (bottom)
+    # -x_i => +pi/2 degrees (top)
+    a *= -1
+
+    return r, a, xm_i, xm_j
