@@ -235,9 +235,9 @@ def model4_jac(x, *params):
 
 
 # Default params for scipy.optimize.curve_fit
-modelv1_params_initial_guess = (1, 1, 1, 1, 1, 1, 0)
-modelv1_params_lower_bound = (0, 0, 0, 0, 0, 0, -np.pi / 2)
-modelv1_params_upper_bound = (np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, +np.pi / 2)
+modelv1_params_initial_guess = (2, -1, 1, 1, 1, 1, 0)
+modelv1_params_lower_bound = (0, -20, 0, 0, 0, 0, -np.pi / 2)
+modelv1_params_upper_bound = (20, +20, 100, 100, 100, 100, +np.pi / 2)
 model1_params_initial_guess = modelv1_params_initial_guess
 model2_params_initial_guess = modelv1_params_initial_guess
 model3_params_initial_guess = modelv1_params_initial_guess
