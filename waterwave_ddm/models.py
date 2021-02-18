@@ -1,11 +1,13 @@
 """
 A collection of models of ISF functions to test
+and fitting function
 
 x[0] refers to q_r (radial component of wavevector)
 x[1] refers to q_theta (angular component of wavevector in radians between -pi/2 to pi/2)
 x[2] refers to tau (lag time)
 """
 import numpy as np
+from typing import Tuple
 
 
 def _background_v1(x, *params):
@@ -122,7 +124,7 @@ def _foreground_v2_jac(x, *params):
     return jac
 
 
-def model1(x, *params):
+def model1_func(x, *params):
     """
     The model defined as I_1 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -150,7 +152,7 @@ def model1_jac(x, *params):
     return _background_v1_jac(x, *params) + _foreground_v1_jac(x, *params)
 
 
-def model2(x, *params):
+def model2_func(x, *params):
     """
     The model defined as I_2 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -178,7 +180,7 @@ def model2_jac(x, *params):
     return _background_v2_jac(x, *params) + _foreground_v1_jac(x, *params)
 
 
-def model3(x, *params):
+def model3_func(x, *params):
     """
     The model defined as I_3 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -206,7 +208,7 @@ def model3_jac(x, *params):
     return _background_v1_jac(x, *params) + _foreground_v2_jac(x, *params)
 
 
-def model4(x, *params):
+def model4_func(x, *params):
     """
     The model defined as I_4 as given in
     [this image](https://raw.githubusercontent.com/inwwin/waterwave-ddm/master/assets/modelv1.png)
@@ -250,12 +252,12 @@ model1_params_upper_bound = modelv1_params_upper_bound
 model2_params_upper_bound = modelv1_params_upper_bound
 model3_params_upper_bound = modelv1_params_upper_bound
 model4_params_upper_bound = modelv1_params_upper_bound
-models = (model1, model2, model3, model4)
+models_func = (model1_func, model2_func, model3_func, model4_func)
 models_jac = (model1_jac, model2_jac, model3_jac, model4_jac)
-models_initial_guess = (model1_params_initial_guess,
-                        model2_params_initial_guess,
-                        model3_params_initial_guess,
-                        model4_params_initial_guess)
+models_params_initial_guess = (model1_params_initial_guess,
+                               model2_params_initial_guess,
+                               model3_params_initial_guess,
+                               model4_params_initial_guess)
 models_params_lower_bound = (model1_params_lower_bound,
                              model2_params_lower_bound,
                              model3_params_lower_bound,
@@ -264,3 +266,47 @@ models_params_upper_bound = (model1_params_upper_bound,
                              model2_params_upper_bound,
                              model3_params_upper_bound,
                              model4_params_upper_bound)
+models_zip = zip(models_func, models_jac, models_params_initial_guess,
+                 models_params_lower_bound, models_params_upper_bound)
+
+
+class ISFModel:
+    """Model of a water surface wave image structure function"""
+
+    def __init__(self, number, func, jac, params_initial_guess, params_lower_bound, params_upper_bound):
+        self.number = number
+        self.func = func
+        self.jacobian = jac
+        self.params_initial_guess = params_initial_guess
+        self.params_lower_bound = params_lower_bound
+        self.params_upper_bound = params_upper_bound
+
+    def fit_model(self, xdata: np.ndarray, ydata: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Fit the model to the prepared xdata and ydata, and return the optimized params and their covariance"""
+        from scipy.optimize import curve_fit
+        # TODO: Calculate sigmas and include in the curve_fit function call
+        params_optimized, params_covariance = \
+            curve_fit(self.func, xdata, ydata,
+                      jac=self.jacobian,
+                      p0=self.params_initial_guess,
+                      bounds=(self.params_lower_bound, self.params_upper_bound))
+        return params_optimized, params_covariance
+
+    @staticmethod
+    def prepare_xydata(ddm_array: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Return xdata and ydata prepared according to scipy.optimize.curve_fit"""
+        from waterwave_ddm.ddm_polar_inspect import polar_space
+        r, a, *_ = polar_space(ddm_array.shape)
+        tau = np.arange(0, ddm_array.shape[2])
+
+        xdata = np.empty((3, ddm_array.size))
+        xdata[0] = np.repeat(r.flatten('C'), tau.size)
+        xdata[1] = np.repeat(a.flatten('C'), tau.size)
+        xdata[2] = np.tile(tau, r.size)
+
+        ydata = ddm_array.flatten('C')
+
+        return xdata, ydata
+
+
+models = [ISFModel(number, *params) for number, params in enumerate(models_zip, start=1)]
