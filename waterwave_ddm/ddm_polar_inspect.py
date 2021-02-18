@@ -1,17 +1,14 @@
 """View the evolution of an image structure function over lag time either radially or azimuthally"""
 import numpy as np
 # import json
+from typing import Tuple
 
 
-def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_radius: float):
-    """
-    Convert the domain of an image structure function from cartesian coordinate into polar coordinate
-    by averaging over appropriate bins
-    """
+def polar_space(shape: Tuple[int, ...]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     # Init a meshgrid of cartesian coordinates
-    centre = (x.shape[0] // 2, 0)
+    centre = (shape[0] // 2, 0)
     x_i = np.arange(-centre[0], +centre[0] + 1, +1)
-    x_j = np.arange(0, x.shape[1])
+    x_j = np.arange(0, shape[1])
     x_i = np.fft.ifftshift(x_i)  # so that our map is compatible with x
     xm_i, xm_j = np.meshgrid(x_i, x_j, indexing='ij')
 
@@ -22,9 +19,21 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
     a[a > np.pi] -= 2 * np.pi
     # This makes our angle measured anticlockwise with
     # +x_j => 0 degrees
-    # +x_i => -90 degrees (bottom)
-    # -x_i => +90 degrees (top)
-    a *= -180. / np.pi
+    # +x_i => -pi/2 degrees (bottom)
+    # -x_i => +pi/2 degrees (top)
+    a *= -1
+
+    return r, a, xm_i, xm_j
+
+
+def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_radius: float) -> \
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Convert the domain of an image structure function from cartesian coordinate into polar coordinate
+    by averaging over appropriate bins
+    """
+    r, a, xm_i, xm_j = polar_space(x.shape)
+    a = np.rad2deg(a)
 
     # Results holder array
     # index 0: angle
@@ -149,7 +158,7 @@ def main():
         try:
             params.out.mkdir(mode=0o755, parents=True, exist_ok=True)
         except FileExistsError:
-            parser.error('fft_out must be a directory')
+            parser.error('out must be a directory')
 
         np.save(params.out / 'polar_ddm.npy',      result)
         np.save(params.out / 'median_angle.npy',   median_angle)
@@ -187,7 +196,7 @@ def main():
             else:
                 print('Inspecting radial view at median angle = ', median_angle[rai])
 
-            animation, fig, _, _, _ = \
+            animation, fig, *_ = \
                 ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, result, max_ti, interval)
 
             fig.show()
