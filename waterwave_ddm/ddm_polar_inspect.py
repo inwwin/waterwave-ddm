@@ -10,6 +10,14 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
     """
     Convert the domain of an image structure function from cartesian coordinate into polar coordinate
     by averaging over appropriate bins
+
+    Return
+    ======
+    A tuple of `result`, `median_angle`, `median_radius`, `average_angle`, `average_radius` arrays
+    - `result` is an ndarray of dimensions 3 of averaged input at each
+      - angle (0th index)
+      - radius (1st index)
+      - time (2nd index)
     """
     r, a, xm_i, xm_j = polar_space(x.shape)
     a = np.rad2deg(a)
