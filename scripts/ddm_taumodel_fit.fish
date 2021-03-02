@@ -14,10 +14,10 @@ python $ddm_time_view $try2_data -tm 130 -ij 0 3 \
     -ub 2.1  -1.80 0.225 110 \
     -tf 5 120
 python $ddm_time_view $try2_data -tm 130 -ij 0 4 \
-	-p0 2.03 -2.16 0.220 93 \
-	-lb 1.9  -2.50 0.210 80 \
-	-ub 2.1  -1.80 0.225 110 \
-	-tf 5 120
+    -p0 2.03 -2.16 0.220 93 \
+    -lb 1.9  -2.50 0.210 80 \
+    -ub 2.1  -1.80 0.225 110 \
+    -tf 5 120
 python $ddm_time_view $try2_data -tm 130 -ij 0 5 \
     -p0 2.0  -2.17 0.240 49 \
     -lb 1.9  -2.50 0.190 40 \
