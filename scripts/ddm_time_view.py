@@ -88,9 +88,10 @@ time_plotting_space = np.linspace(0, params.ti_max + 0.5, 2000)
 fitted_model = taumodel_func(time_plotting_space, *popt)
 
 if params.plot:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(8., 6.))
     fig: matplotlib.figure.Figure
     ax: matplotlib.axes.Axes
     ax.plot(ddm_array[i, j, 0:params.ti_max])
     ax.plot(time_plotting_space, fitted_model)
+    ax.set_xlabel('$\\tau$ (frames)')
     plt.show()
