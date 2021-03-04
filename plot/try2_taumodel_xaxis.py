@@ -21,7 +21,8 @@ def linear_jac(x, a, b):
 parser = argparse.ArgumentParser()
 parser.add_argument('-t2r', '--tau2reciprocal', action='store_true',
                     help='plot reciprocal of tau2 instead of tau2 itself')
-parser.add_argument('-s', '--save', action='store_true')
+parser.add_argument('-s1', '--save1', action='store_true')
+parser.add_argument('-s2', '--save2', action='store_true')
 cli_params = parser.parse_args()
 
 cdir = p.abspath(p.dirname(__file__))
@@ -93,7 +94,12 @@ if cli_params.tau2reciprocal:
     tau2_reciproc_physical = np.reciprocal(tau2_physical)
     tau2_reciproc_err_physical = tau2_err_frac * tau2_reciproc_physical
 
-fig, ((axc1, axc2), (axfreq, axtau2)) = plt.subplots(2, 2, sharex=True, figsize=(9., 7.))
+figwidth_cm = 22
+figwidth_inch = figwidth_cm / 2.54
+figheight_inch = figwidth_inch * 7. / 9.
+figsize = (figwidth_inch, figheight_inch)
+
+fig1, ((axc1, axc2), (axfreq, axtau2)) = plt.subplots(2, 2, sharex=True, figsize=figsize)
 titles = (f'$C_1$ ($C_{{1\\,\\mathrm{{av}}}}={c1av:.4f}$)',
           f'$-C_2$ ($C_{{2\\,\\mathrm{{av}}}}={c2av:.4f}$)',
           f'$\\Omega$ ($\\Omega_\\mathrm{{fit}}='
@@ -129,11 +135,37 @@ for ax in (axfreq, axtau2):
     secax.set_xticks([6, 7, 8, 9, 10, 12, 14, 16, 19, 24, 30, 40])
 axfreq.set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
 axtau2.set_ylabel('$\\tau_2$ (s)')
-fig.suptitle('Params fitted along $q_x$ axis at $q_y=0$')
-fig.set_tight_layout(True)
+fig1.suptitle('Params fitted along $q_x$ axis at $q_y=0$')
+fig1.set_tight_layout(True)
 
-if cli_params.save:
-    fig_path = p.abspath(cdir + '/try2_taumodel_xaxis.png')
-    fig.savefig(fig_path, dpi=300)
-else:
+fig2, axtau2s = plt.subplots(2, 2, figsize=figsize)
+(axtau2lin, axtau2semilogx), (axtau2semilogy, axtau2loglog) = axtau2s
+for axtau2row in axtau2s:
+    for axtau2cell in axtau2row:
+        axtau2cell.errorbar(wavenumber_space, tau2_physical, tau2_err_physical,
+                            fmt='_', linestyle='')
+        axtau2cell.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
+        axtau2cell.set_ylabel('$\\tau_2$ (s)')
+for axtau2logy in (axtau2semilogy, axtau2loglog):
+    axtau2logy.set_yscale('log')
+for axtau2logx in (axtau2semilogx, axtau2loglog):
+    axtau2logx.set_xscale('log')
+axtau2lin.sharey(axtau2semilogx)
+axtau2lin.sharex(axtau2semilogy)
+axtau2loglog.sharey(axtau2logy)
+axtau2loglog.sharex(axtau2logx)
+axtau2lin.set_title('$\\tau_2$ linear plot')
+axtau2semilogx.set_title('$\\tau_2$ semilog x plot')
+axtau2semilogy.set_title('$\\tau_2$ semilog y plot')
+fig2.set_tight_layout(True)
+
+axtau2loglog.set_title('$\\tau_2$ log-log plot')
+if not (cli_params.save1 or cli_params.save2):
     plt.show()
+else:
+    if cli_params.save1:
+        fig1_path = p.abspath(cdir + '/try2_taumodel_xaxis.png')
+        fig1.savefig(fig1_path, dpi=300)
+    if cli_params.save2:
+        fig2_path = p.abspath(cdir + '/try2_taumodel_xaxis_tau2.png')
+        fig2.savefig(fig2_path, dpi=300)
