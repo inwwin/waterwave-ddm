@@ -1,4 +1,5 @@
 import numpy as np
+import json
 import os.path as p
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
@@ -39,26 +40,49 @@ try2_config = np.loadtxt(csv_path,
 # print(try2_config)
 # print(try2_fit)
 
-c1av = np.mean(try2_fit[:, 0])
+vid_info_path = cdir + '/../../data/initial-dev/try2/vid_info.json'
+with open(vid_info_path) as vid_info_file:
+    vid_info = json.load(vid_info_file)
+calibration_path = cdir + '/../../data/initial-dev/try2/spatial_calibration.json'
+with open(calibration_path) as calibration_file:
+    calibration = json.load(calibration_file)
+wavenumber_factor = 2 * np.pi / (vid_info['fft']['size'] * calibration['calibration_factor'])
+wavenumber_unit = '\\mathrm{{rad}}\\,\\mathrm{{{}}}^{{-1}}'.format(calibration['physical_unit'])
+frame_interval = vid_info['framerate'][1] / vid_info['framerate'][0]
+print(f'frame_interval = {frame_interval} s')
+print(f'wavenumber_factor = {wavenumber_factor}')
+
+wavenumber_space = wavenumber_factor * try2_config[:, 1]
+
+c1 = try2_fit[:, 0]
+c1av = np.mean(c1)
 print(f'c1av = {c1av:.4f}')
-c2av = np.mean(try2_fit[:, 1])
+c2 = try2_fit[:, 1]
+c2av = np.mean(c2)
 print(f'c2av = {c2av:.4f}')
 
-freqpopt, freqpcov = curve_fit(linear_func, try2_config[:, 1], try2_fit[:, 2],
-                               jac=linear_jac, sigma=try2_fit[:, 6], absolute_sigma=True)
-fit_x = np.array([0, np.max(try2_config[:, 1]) + 0.5])
-a, b = tuple(freqpopt)
-freq_fit = linear_func(fit_x, a, b)
-print('a, b =', freqpopt)
+freq_physical = try2_fit[:, 2] / frame_interval
+freq_err_physical = try2_fit[:, 6] / frame_interval
+freqpopt, freqpcov = curve_fit(linear_func, wavenumber_space, freq_physical,
+                               jac=linear_jac, sigma=freq_err_physical, absolute_sigma=True)
+fit_x = np.array([np.min(try2_config[:, 1]) - 0.5, np.max(try2_config[:, 1]) + 0.5])
+fit_wavenumber = wavenumber_factor * fit_x
+# a is the physical wave speed
+speed_physical, b = tuple(freqpopt)
+freq_fit = linear_func(fit_wavenumber, speed_physical, b)
+print(freqpopt)
 print(freqpcov)
 print(np.square(np.diagonal(freqpcov)))
-logical_speed = a * 1024 / (2 * np.pi)
-print(f'wave speed = {logical_speed:.4} pixels/frame')
+speed_logical = speed_physical * frame_interval / calibration['calibration_factor']
+print(f'physical speed = {speed_physical} {calibration["physical_unit"]}/s')
+print(f'logical speed = {speed_logical:.4} pixels/frame')
 
-tau2popt, tau2pcov = curve_fit(linear_func, try2_config[:, 1], try2_fit[:, 3],
-                               jac=linear_jac, sigma=try2_fit[:, 7], absolute_sigma=True)
+tau2_physical = try2_fit[:, 3] * frame_interval
+tau2_err_physical = try2_fit[:, 7] * frame_interval
+tau2popt, tau2pcov = curve_fit(linear_func, wavenumber_space, tau2_physical,
+                               jac=linear_jac, sigma=tau2_err_physical, absolute_sigma=True)
 c, d = tuple(tau2popt)
-tau2_fit = linear_func(fit_x, c, d)
+tau2_fit = linear_func(fit_wavenumber, c, d)
 print('c, d =', tau2popt)
 print(tau2pcov)
 print(np.square(np.diagonal(tau2pcov)))
@@ -66,25 +90,28 @@ print(np.square(np.diagonal(tau2pcov)))
 # Try plotting reciprocal of tau2 instead
 if cli_params.tau2reciprocal:
     tau2_err_frac = try2_fit[:, 7] / try2_fit[:, 3]
-    tau2_reciproc = np.reciprocal(try2_fit[:, 3])
-    tau2_reciproc_err = tau2_err_frac * tau2_reciproc
-    try2_fit[:, 3] = tau2_reciproc
-    try2_fit[:, 7] = tau2_reciproc_err
+    tau2_reciproc_physical = np.reciprocal(tau2_physical)
+    tau2_reciproc_err_physical = tau2_err_frac * tau2_reciproc_physical
 
-try2_fit[:, 1] *= -1
 fig, ((axc1, axc2), (axfreq, axtau2)) = plt.subplots(2, 2, sharex=True, figsize=(9., 7.))
-params = (f'$C_1$ ($C_{{1\\,av}}={c1av:.4f}$)',
-          f'$-C_2$ ($C_{{2\\,av}}={c2av:.4f}$)',
-          f'$\\Omega$ ($\\Omega_{{fit}}={a:.5}\\,q_x+{b:.4}$)',
-          f'$\\tau_2$ ($\\tau_{{2\\,fit}}={c:.4}\\,q_x+{d:.4}$)')
+titles = (f'$C_1$ ($C_{{1\\,\\mathrm{{av}}}}={c1av:.4f}$)',
+          f'$-C_2$ ($C_{{2\\,\\mathrm{{av}}}}={c2av:.4f}$)',
+          f'$\\Omega$ ($\\Omega_\\mathrm{{fit}}='
+          f'({speed_physical:.5}\\,\\mathrm{{{calibration["physical_unit"]}}}\\,\\mathrm{{s}}^{{-1}})\\,q_x+'
+          f'({b:.4}\\,\\mathrm{{rad}}\\,\\mathrm{{s}}^{{-1}}$)',
+          f'$\\tau_2$ ($\\tau_{{2\\,\\mathrm{{fit}}}}={c:.4}\\,q_x+{d:.4}$)')
 axs = (axc1, axc2, axfreq, axtau2)
-axz = zip(params, axs)
+axys = (c1, -c2, freq_physical,
+        tau2_physical if not cli_params.tau2reciprocal else tau2_reciproc_physical)
+axys_err = (try2_fit[:, 4], try2_fit[:, 5], freq_err_physical,
+            tau2_err_physical if not cli_params.tau2reciprocal else tau2_reciproc_err_physical)
+axz = zip(titles, axs, axys, axys_err)
 
-for i, (param, ax) in enumerate(axz):
+for i, (title, ax, axy, axy_err) in enumerate(axz):
     ax: Axes
-    ax.errorbar(try2_config[:, 1], try2_fit[:, i], try2_fit[:, i + 4],
+    ax.errorbar(wavenumber_space, axy, axy_err,
                 fmt='_', linestyle='')
-    ax.set_title(param)
+    ax.set_title(title)
 axc1.sharey(axc2)
 
 fitted_line_kwargs = {
@@ -92,16 +119,21 @@ fitted_line_kwargs = {
 }
 axc1.axhline(c1av, **fitted_line_kwargs)
 axc2.axhline(-c2av, **fitted_line_kwargs)
-axfreq.plot(fit_x, freq_fit, **fitted_line_kwargs)
+axfreq.plot(fit_wavenumber, freq_fit, **fitted_line_kwargs)
 if not cli_params.tau2reciprocal:
-    axtau2.plot(fit_x, tau2_fit, **fitted_line_kwargs)
+    axtau2.plot(fit_wavenumber, tau2_fit, **fitted_line_kwargs)
 for ax in (axfreq, axtau2):
-    ax.set_xlabel('$q_x$')
+    ax.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
+    secax = ax.secondary_xaxis(1., functions=(lambda x: 200 * np.pi / x, lambda x: 200 * np.pi / x))
+    secax.set_xlabel(f'$\\lambda_x$ (c{calibration["physical_unit"]})')
+    secax.set_xticks([6, 7, 8, 9, 10, 12, 14, 16, 19, 24, 30, 40])
+axfreq.set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
+axtau2.set_ylabel('$\\tau_2$ (s)')
 fig.suptitle('Params fitted along $q_x$ axis at $q_y=0$')
+fig.set_tight_layout(True)
 
 if cli_params.save:
     fig_path = p.abspath(cdir + '/try2_taumodel_xaxis.png')
-    fig.set_tight_layout(True)
     fig.savefig(fig_path, dpi=300)
 else:
     plt.show()
