@@ -19,8 +19,6 @@ def linear_jac(x, a, b):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-t2r', '--tau2reciprocal', action='store_true',
-                    help='plot reciprocal of tau2 instead of tau2 itself')
 parser.add_argument('-s1', '--save1', action='store_true')
 parser.add_argument('-s2', '--save2', action='store_true')
 cli_params = parser.parse_args()
@@ -88,11 +86,10 @@ print('c, d =', tau2popt)
 print(tau2pcov)
 print(np.square(np.diagonal(tau2pcov)))
 
-# Try plotting reciprocal of tau2 instead
-if cli_params.tau2reciprocal:
-    tau2_err_frac = try2_fit[:, 7] / try2_fit[:, 3]
-    tau2_reciproc_physical = np.reciprocal(tau2_physical)
-    tau2_reciproc_err_physical = tau2_err_frac * tau2_reciproc_physical
+tau2_err_frac = try2_fit[:, 7] / try2_fit[:, 3]
+damping_physical = np.reciprocal(tau2_physical)
+damping_err_physical = tau2_err_frac * damping_physical
+
 
 figwidth_cm = 22
 figwidth_inch = figwidth_cm / 2.54
@@ -107,10 +104,8 @@ titles = (f'$C_1$ ($C_{{1\\,\\mathrm{{av}}}}={c1av:.4f}$)',
           f'({b:.4}\\,\\mathrm{{rad}}\\,\\mathrm{{s}}^{{-1}}$)',
           f'$\\tau_2$ ($\\tau_{{2\\,\\mathrm{{fit}}}}={c:.4}\\,q_x+{d:.4}$)')
 axs = (axc1, axc2, axfreq, axtau2)
-axys = (c1, -c2, freq_physical,
-        tau2_physical if not cli_params.tau2reciprocal else tau2_reciproc_physical)
-axys_err = (try2_fit[:, 4], try2_fit[:, 5], freq_err_physical,
-            tau2_err_physical if not cli_params.tau2reciprocal else tau2_reciproc_err_physical)
+axys = (c1, -c2, freq_physical, tau2_physical)
+axys_err = (try2_fit[:, 4], try2_fit[:, 5], freq_err_physical, tau2_err_physical)
 axz = zip(titles, axs, axys, axys_err)
 
 for i, (title, ax, axy, axy_err) in enumerate(axz):
@@ -126,8 +121,7 @@ fitted_line_kwargs = {
 axc1.axhline(c1av, **fitted_line_kwargs)
 axc2.axhline(-c2av, **fitted_line_kwargs)
 axfreq.plot(fit_wavenumber, freq_fit, **fitted_line_kwargs)
-if not cli_params.tau2reciprocal:
-    axtau2.plot(fit_wavenumber, tau2_fit, **fitted_line_kwargs)
+axtau2.plot(fit_wavenumber, tau2_fit, **fitted_line_kwargs)
 for ax in (axfreq, axtau2):
     ax.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
     secax = ax.secondary_xaxis(1., functions=(lambda x: 200 * np.pi / x, lambda x: 200 * np.pi / x))
@@ -138,28 +132,29 @@ axtau2.set_ylabel('$\\tau_2$ (s)')
 fig1.suptitle('Params fitted along $q_x$ axis at $q_y=0$')
 fig1.set_tight_layout(True)
 
-fig2, axtau2s = plt.subplots(2, 2, figsize=figsize)
-(axtau2lin, axtau2semilogx), (axtau2semilogy, axtau2loglog) = axtau2s
-for axtau2row in axtau2s:
-    for axtau2cell in axtau2row:
-        axtau2cell.errorbar(wavenumber_space, tau2_physical, tau2_err_physical,
-                            fmt='_', linestyle='')
-        axtau2cell.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
-        axtau2cell.set_ylabel('$\\tau_2$ (s)')
-for axtau2logy in (axtau2semilogy, axtau2loglog):
-    axtau2logy.set_yscale('log')
-for axtau2logx in (axtau2semilogx, axtau2loglog):
-    axtau2logx.set_xscale('log')
-axtau2lin.sharey(axtau2semilogx)
-axtau2lin.sharex(axtau2semilogy)
-axtau2loglog.sharey(axtau2logy)
-axtau2loglog.sharex(axtau2logx)
-axtau2lin.set_title('$\\tau_2$ linear plot')
-axtau2semilogx.set_title('$\\tau_2$ semilog x plot')
-axtau2semilogy.set_title('$\\tau_2$ semilog y plot')
+fig2, axdampings = plt.subplots(2, 2, figsize=figsize)
+(axdampinglin, axdampingsemilogx), (axdampingsemilogy, axdampingloglog) = axdampings
+for axdampingrow in axdampings:
+    for axdampingcell in axdampingrow:
+        axdampingcell.errorbar(wavenumber_space, damping_physical, damping_err_physical,
+                               fmt='_', linestyle='')
+        axdampingcell.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
+        axdampingcell.set_ylabel('$\\tau_2^{-1}$ ($\\mathrm{s}^{-1}$)')
+for axdampinglogy in (axdampingsemilogy, axdampingloglog):
+    axdampinglogy.set_yscale('log')
+for axdampinglogx in (axdampingsemilogx, axdampingloglog):
+    axdampinglogx.set_xscale('log')
+axdampinglin.sharey(axdampingsemilogx)
+axdampinglin.sharex(axdampingsemilogy)
+axdampingloglog.sharey(axdampinglogy)
+axdampingloglog.sharex(axdampinglogx)
+axdampinglin.set_title('$\\tau_2^{-1}$ linear plot')
+axdampingsemilogx.set_title('$\\tau_2^{-1}$ semilog x plot')
+axdampingsemilogy.set_title('$\\tau_2^{-1}$ semilog y plot')
+axdampingloglog.set_title('$\\tau_2^{-1}$ log-log plot')
 fig2.set_tight_layout(True)
 
-axtau2loglog.set_title('$\\tau_2$ log-log plot')
+
 if not (cli_params.save1 or cli_params.save2):
     plt.show()
 else:
