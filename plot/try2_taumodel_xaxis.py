@@ -52,6 +52,8 @@ print(f'frame_interval = {frame_interval} s')
 print(f'wavenumber_factor = {wavenumber_factor}')
 
 wavenumber_space = wavenumber_factor * try2_config[:, 1]
+wavenumber_space_log = np.log(wavenumber_space)
+wavenumber_logspace_dense = np.geomspace(wavenumber_space.min(), wavenumber_space.max(), 200)
 
 c1 = try2_fit[:, 0]
 c1av = np.mean(c1)
@@ -89,6 +91,19 @@ print(np.square(np.diagonal(tau2pcov)))
 tau2_err_frac = try2_fit[:, 7] / try2_fit[:, 3]
 damping_physical = np.reciprocal(tau2_physical)
 damping_err_physical = tau2_err_frac * damping_physical
+damping_log = np.log(damping_physical)
+damping_log_err = tau2_err_frac
+first_damping_fit_index = 2
+dampingpopt, dampingpcov = curve_fit(linear_func,
+                                     wavenumber_space_log[first_damping_fit_index:],
+                                     damping_log[first_damping_fit_index:],
+                                     sigma=damping_log_err[first_damping_fit_index:],
+                                     jac=linear_jac)
+damping_wavenum_exp, damping_wavenum_coeff_log = tuple(dampingpopt)
+damping_wavenum_coeff = np.exp(damping_wavenum_coeff_log)
+damping_power_fit = damping_wavenum_coeff * np.power(wavenumber_logspace_dense, damping_wavenum_exp)
+print('damping power =', damping_wavenum_exp)
+print('damping power coeff =', damping_wavenum_coeff)
 
 
 figwidth_cm = 22
@@ -138,6 +153,7 @@ for axdampingrow in axdampings:
     for axdampingcell in axdampingrow:
         axdampingcell.errorbar(wavenumber_space, damping_physical, damping_err_physical,
                                fmt='_', linestyle='')
+        axdampingcell.plot(wavenumber_logspace_dense, damping_power_fit)
         axdampingcell.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
         axdampingcell.set_ylabel('$\\tau_2^{-1}$ ($\\mathrm{s}^{-1}$)')
 for axdampinglogy in (axdampingsemilogy, axdampingloglog):
@@ -152,6 +168,9 @@ axdampinglin.set_title('$\\tau_2^{-1}$ linear plot')
 axdampingsemilogx.set_title('$\\tau_2^{-1}$ semilog x plot')
 axdampingsemilogy.set_title('$\\tau_2^{-1}$ semilog y plot')
 axdampingloglog.set_title('$\\tau_2^{-1}$ log-log plot')
+fig2.suptitle('Damping coefficient vs wavenumber\n'
+              '$(\\tau_2^{-1})_\\mathrm{fit}\\propto '
+              f'q_x^{{{damping_wavenum_exp:.4}}}$')
 fig2.set_tight_layout(True)
 
 
