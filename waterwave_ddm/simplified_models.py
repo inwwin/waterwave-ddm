@@ -35,7 +35,7 @@ def taumodel_jac(tau, C1, C2, freq, tau2) -> np.ndarray:
     jac = np.empty((tau.size, 4))
     jac[:, 0] = 1
     jac[:, 1] =      e2 * cos
-    jac[:, 2] = C2 * e2 * sin * -freq
+    jac[:, 2] = C2 * e2 * sin * -tau
     jac[:, 3] = C2 * e2 * cos * (tau / np.square(tau2))
     return jac
 
