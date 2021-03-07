@@ -12,11 +12,11 @@ import matplotlib.animation
 from waterwave_ddm.simplified_models import taumodel_func, taumodel_jac
 from scipy.optimize import curve_fit
 
-#                 C1     C2    freq    tau
-params_names  = ('C1',  'C2', 'freq', 'tau')
+#                 C1     C2    freq    alpha
+params_names  = ('C1',  'C2', 'freq', 'alpha')
 initial_guess = [  2.,   -1.,     1.,    1.  ]  # noqa: E201, E202
-lower_bounds  = [  1.9, -90.,     0.,    0.1 ]  # noqa: E201, E202
-upper_bounds  = [  2.1,  -0.5,   50.,   20.  ]  # noqa: E201, E202
+lower_bounds  = [  1.9, -90.,     0.,    0.00001 ]  # noqa: E201, E202
+upper_bounds  = [  2.1,  -0.5,   50.,    3.  ]  # noqa: E201, E202
 parser = argparse.ArgumentParser()
 coord_group = parser.add_mutually_exclusive_group(required=True)
 coord_group.add_argument('-ij', type=int, nargs=2, metavar=('i', 'j'))

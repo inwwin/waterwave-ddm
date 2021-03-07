@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 from typing import Tuple
 
 
-def taumodel_func(tau, C1, C2, freq, tau2) -> np.ndarray:
+def taumodel_func(tau, C1, C2, freq, alpha) -> np.ndarray:
     """
     Calculate model function in tau domain as given in
     [this image](https://github.com/inwwin/waterwave-ddm/blob/master/assets/modelv1_simplified.png)
@@ -17,11 +17,11 @@ def taumodel_func(tau, C1, C2, freq, tau2) -> np.ndarray:
     """
     phase = freq * tau
     cos = np.cos(phase)
-    e2 = np.exp(-tau / tau2)
+    e2 = np.exp(-tau * alpha)
     return C1 + C2 * e2 * cos
 
 
-def taumodel_jac(tau, C1, C2, freq, tau2) -> np.ndarray:
+def taumodel_jac(tau, C1, C2, freq, alpha) -> np.ndarray:
     """
     Calculate jacobian for the model function in tau model as given in
     [this image](https://github.com/inwwin/waterwave-ddm/blob/master/assets/modelv1_simplified.png)
@@ -31,12 +31,12 @@ def taumodel_jac(tau, C1, C2, freq, tau2) -> np.ndarray:
     phase = freq * tau
     cos = np.cos(phase)
     sin = np.sin(phase)
-    e2 = np.exp(-tau / tau2)
+    e2 = np.exp(-tau * alpha)
     jac = np.empty((tau.size, 4))
     jac[:, 0] = 1
     jac[:, 1] =      e2 * cos
-    jac[:, 2] = C2 * e2 * sin * -freq
-    jac[:, 3] = C2 * e2 * cos * (tau / np.square(tau2))
+    jac[:, 2] = C2 * e2 * sin * -tau
+    jac[:, 3] = C2 * e2 * cos * -tau
     return jac
 
 
@@ -81,10 +81,10 @@ def fit_taumodel_iteratively(data: np.ndarray, progress_report=None, **kwargs) -
     kwargs.setdefault('xdata', np.arange(times))
     kwargs.setdefault('f', taumodel_func)
     kwargs.setdefault('jac', taumodel_jac)
-    #                C1     C2   freq  tau
+    #                C1     C2   freq  alpha
     initial_guess = [2.,   -1.,    1.,  1.]
-    lower_bounds  = [1.9, -90.,    0.,  0.1]
-    upper_bounds  = [2.1,  -0.5,  50., 20.]
+    lower_bounds  = [1.9, -90.,    0.,  0.00001]
+    upper_bounds  = [2.1,  -0.5,  50.,  3.]
     kwargs.setdefault('p0', initial_guess)
     kwargs.setdefault('bounds', (lower_bounds, upper_bounds))
     kwargs.pop('ydata', None)
