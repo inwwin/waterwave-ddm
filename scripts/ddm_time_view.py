@@ -28,7 +28,10 @@ parser.add_argument('-tf', '--fittimerange', dest='timerange',
 parser.add_argument('-p0', type=float, nargs=4, default=initial_guess, metavar=params_names)
 parser.add_argument('-lb', type=float, nargs=4, default=lower_bounds, metavar=params_names, dest='lower_bounds')
 parser.add_argument('-ub', type=float, nargs=4, default=upper_bounds, metavar=params_names, dest='upper_bounds')
-parser.add_argument('-np', '--noplot', dest='plot', action='store_false')
+plot_parser = parser.add_mutually_exclusive_group()
+plot_parser.add_argument('-np', '--noplot', dest='plot', action='store_false')
+plot_parser.add_argument('-s', '--save', nargs='?', default=None, const=False, type=argparse.FileType('wb'),
+                         metavar='fig_out')
 parser.add_argument('ddm_npy_path', type=pathlib.Path)
 # parser.add_argument('save_html_path', type=pathlib.Path, default=False)
 params = parser.parse_args()
@@ -72,6 +75,8 @@ kwargs = {
     'ftol': 5e-16,
     'xtol': 5e-16,
     'gtol': 5e-16,
+    'sigma': np.full_like(fitting_data, 0.1),
+    'absolute_sigma': True
     # 'method': 'dogbox',
 }
 popt, pcov = curve_fit(**kwargs)
@@ -94,4 +99,13 @@ if params.plot:
     ax.plot(ddm_array[i, j, 0:params.ti_max])
     ax.plot(time_plotting_space, fitted_model)
     ax.set_xlabel('$\\tau$ (frames)')
-    plt.show()
+    fig.suptitle(f'$q_x={j}$, $q_y={-i}$')
+    if params.save is None:
+        plt.show()
+    else:
+        if params.save:
+            fig_path = params.save
+        else:
+            import os
+            fig_path = os.environ['FIGURE_PATH'] + f'/q_x-{j:02},q_y-{-i:02}.png'
+        fig.savefig(fig_path, dpi=300)

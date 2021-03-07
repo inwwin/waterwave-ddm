@@ -65,7 +65,7 @@ print(f'c2av = {c2av:.4f}')
 freq_physical = try2_fit[:, 2] / frame_interval
 freq_err_physical = try2_fit[:, 6] / frame_interval
 freqpopt, freqpcov = curve_fit(linear_func, wavenumber_space, freq_physical,
-                               jac=linear_jac, sigma=freq_err_physical, absolute_sigma=True)
+                               jac=linear_jac, sigma=freq_err_physical, absolute_sigma=False)
 fit_x = np.array([np.min(try2_config[:, 1]) - 0.5, np.max(try2_config[:, 1]) + 0.5])
 fit_wavenumber = wavenumber_factor * fit_x
 # a is the physical wave speed
@@ -81,7 +81,7 @@ print(f'logical speed = {speed_logical:.4} pixels/frame')
 tau2_physical = try2_fit[:, 3] * frame_interval
 tau2_err_physical = try2_fit[:, 7] * frame_interval
 tau2popt, tau2pcov = curve_fit(linear_func, wavenumber_space, tau2_physical,
-                               jac=linear_jac, sigma=tau2_err_physical, absolute_sigma=True)
+                               jac=linear_jac, sigma=tau2_err_physical, absolute_sigma=False)
 c, d = tuple(tau2popt)
 tau2_fit = linear_func(fit_wavenumber, c, d)
 print('c, d =', tau2popt)
