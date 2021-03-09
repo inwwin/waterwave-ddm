@@ -1,11 +1,14 @@
 """
-Simplified models ISF function for fitting in single domain
+Model ISF function for fitting in single tau domain
 
 tau refers to lag time
 """
+import warnings
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.signal import find_peaks
 from typing import Tuple
+from numpy.typing import ArrayLike
 
 
 def taumodel_func(tau, C1, C2, freq, tau2) -> np.ndarray:
@@ -38,6 +41,165 @@ def taumodel_jac(tau, C1, C2, freq, tau2) -> np.ndarray:
     jac[:, 2] = C2 * e2 * sin * -tau
     jac[:, 3] = C2 * e2 * cos * (tau / np.square(tau2))
     return jac
+
+
+def guess_C1(ddm_array: np.ndarray, sd_factor: float = 2.5) -> Tuple[ArrayLike, ArrayLike, ArrayLike]:
+    """
+    Guess C1 parameter and its bound based on the mean and standard deviation of ddm_array
+
+    Return
+    ======
+    A Tuple of guessed C1 and its lower and upper bound
+    """
+    C1_guess = np.mean(ddm_array, axis=-1, keepdims=True)
+    assert np.all(C1_guess > 0)
+    C1_std = np.std(ddm_array, ddof=1, axis=-1, keepdims=True)
+    C1_lower_bound = C1_guess - sd_factor * C1_std
+    C1_upper_bound = C1_guess + sd_factor * C1_std
+
+    C1_lower_bound_too_low = C1_lower_bound < C1_guess * .5
+    C1_lower_bound[C1_lower_bound_too_low] = C1_guess[C1_lower_bound_too_low] * .5
+
+    C1_upper_bound_too_high = C1_upper_bound > C1_guess * 1.5
+    C1_upper_bound[C1_upper_bound_too_high] = C1_guess[C1_upper_bound_too_high] * 1.5
+
+    C1_guess = C1_guess.squeeze(axis=-1)
+    C1_lower_bound = C1_lower_bound.squeeze(axis=-1)
+    C1_upper_bound = C1_upper_bound.squeeze(axis=-1)
+    return C1_guess, C1_lower_bound, C1_upper_bound
+
+
+def guess_C2(C1: ArrayLike) -> Tuple[ArrayLike, ArrayLike, ArrayLike]:
+    """
+    Preliminarily guess C2 parameter and its bound based on the value of C1
+
+    Return
+    ======
+    A Tuple of guessed C2 and its lower and upper bound
+    """
+    return -C1, -1.2 * C1, -.05 * C1
+
+
+def guess_freq(ddm_array: np.ndarray, C1: ArrayLike, max_observation: int = 3, sd_factor: float = 2.5) \
+        -> Tuple[ArrayLike, ArrayLike, ArrayLike]:
+    """
+    Guess freq parameter and its bound based on the intercept of ddm_array and C1
+
+    Return
+    ======
+    A Tuple of guessed freq and its lower and upper bound
+    """
+    C1 = np.array(C1)
+    expect_shape = list(ddm_array.shape)
+    expect_shape.pop()
+    expect_shape = tuple(expect_shape)
+    # expect C1 with broadcastable shape to ddm_array except the last dimension
+    C1 = np.broadcast_to(C1, expect_shape)
+
+    it_ddm_array = np.nditer(ddm_array, flags=['external_loop'], order='C')
+    # 1st: guess, 2nd: lower_bound, 3rd: upper_bound
+    it_params = np.nditer([C1, None, None, None], order='C')
+    with it_ddm_array, it_params:
+        it_zip = zip(it_ddm_array, it_params)
+        for i_ddm_array, \
+                (i_C1, i_freq_guess, i_freq_lower_bound, i_freq_upper_bound) \
+                in it_zip:
+            # Find where ddm_array cross C1
+            above_C1 = i_ddm_array >= i_C1
+            cross_frames = np.bitwise_xor(above_C1[..., 1:], above_C1[..., :-1]).nonzero()[0]
+            periods = cross_frames[2:] - cross_frames[:-2]
+            freqs =  2 * np.pi / periods
+            observations = min(max_observation, freqs.size)
+            if observations < 3:
+                warnings.warn(f'observations = {observations} < 3 may give unreliable estimate')
+            ddof = 1 if observations > 1 else 0
+            freq_std = np.std(freqs[:observations], ddof=ddof)
+            freq_delta = max(freq_std * sd_factor, 0.1)
+            i_freq_guess[...]       = freqs[0]
+            i_freq_lower_bound[...] = freqs[0] - freq_delta
+            i_freq_upper_bound[...] = freqs[0] + freq_delta
+        return it_params.operands[1], it_params.operands[2], it_params.operands[3]
+
+
+def guess_C2_tau2(ddm_array: np.ndarray, C1: ArrayLike, freq: ArrayLike, max_observation: int = 5) \
+        -> Tuple[Tuple[ArrayLike, ArrayLike, ArrayLike], Tuple[ArrayLike, ArrayLike, ArrayLike]]:
+    """
+    Guess C2 and tau2 parameters and their bounds based on the decays of the peaks and valleys of ddm_array
+
+    Return
+    ======
+    A Tuple of tuple of guessed C2, tau2 and their lower and upper bound
+    """
+    def expodecay_func(x, aC2, tau2):
+        return aC2 * np.exp(-x / tau2)
+
+    def expodecay_jac(x, aC2, tau2):
+        jac = np.empty((x.size, 2))
+        jac[:, 0] = np.exp(-x / tau2)
+        jac[:, 1] = aC2 * jac[:, 0] * (x / np.square(tau2))
+        return jac
+
+    C1 = np.array(C1)
+    freq = np.array(freq)
+    expect_shape = list(ddm_array.shape)
+    expect_shape.pop()
+    expect_shape = tuple(expect_shape)
+    # expect C1 and freq with broadcastable shape to ddm_array except the last dimension
+    C1 = np.broadcast_to(C1, expect_shape)
+    freq = np.broadcast_to(freq, expect_shape)
+
+    it_ddm_array = np.nditer(ddm_array, flags=['external_loop'], order='C', op_flags=[['readwrite']])
+    # 1st: guess, 2nd: lower_bound, 3rd: upper_bound
+    it_params = np.nditer([C1, freq, None, None, None, None, None, None], order='C')
+    with it_ddm_array, it_params:
+        it_zip = zip(it_ddm_array, it_params)
+        for i_ddm_array, \
+                (i_C1, i_freq,
+                 i_C2_guess, i_C2_lower_bound, i_C2_upper_bound,
+                 i_tau2_guess, i_tau2_lower_bound, i_tau2_upper_bound) \
+                in it_zip:
+            period = 2 * np.pi / i_freq
+            # peak_distance = 0.8 * period
+            # peaks, _ = find_peaks(i_ddm_array, distance=peak_distance)
+            peak_width = period / 4
+            peaks, _ = find_peaks(i_ddm_array, width=peak_width)
+            valleys, _ = find_peaks(-i_ddm_array, width=peak_width)
+            peaks_height = i_ddm_array[peaks] - i_C1
+            valleys_height = -i_ddm_array[valleys] + i_C1
+            # detect the first time that the peaks no longer decrease
+            peaks_height_drop = np.nonzero(peaks_height[1:] - peaks_height[:-1] > 0)[0]
+            valleys_height_drop = np.nonzero(valleys_height[1:] - valleys_height[:-1] > 0)[0]
+            peaks_height_last_drop = peaks_height_drop[0] + 1 if peaks_height_drop.size else len(peaks)
+            valleys_height_last_drop = valleys_height_drop[0] + 1 if valleys_height_drop.size else len(valleys)
+
+            # extract the first extrema that monotonically decrease
+            extrema = np.concatenate((peaks[:peaks_height_last_drop], valleys[:valleys_height_last_drop]))
+            extrema_heights = np.concatenate((peaks_height[:peaks_height_last_drop],
+                                              valleys_height[:valleys_height_last_drop]))
+            assert extrema.size == extrema_heights.size
+            observations = min(extrema.size, max_observation)
+            assert observations >= 2, 'Require observations >= 2 to extract 2 free parameters: C2i, tau2i'
+            extrema_argsort = np.argsort(extrema)
+            extrema_limited_argsort = extrema_argsort[:observations]
+            extrema_limited = extrema[extrema_limited_argsort]
+            extrema_limited_heights = extrema_heights[extrema_limited_argsort]
+            gC2, gC2_lower_bound, gC2_upper_bound = guess_C2(i_C1)
+            gpC2 = -gC2
+            gpC2_lower_bound = -gC2_upper_bound
+            gpC2_upper_bound = -gC2_lower_bound
+            C2tau2opt, C2tau2cov = curve_fit(expodecay_func, extrema_limited, extrema_limited_heights,
+                                             p0=[gpC2, period],
+                                             bounds=([gpC2_lower_bound, 0],
+                                                     [gpC2_upper_bound, np.inf]))
+            i_C2_guess[...] = -C2tau2opt[0]
+            i_C2_lower_bound[...] = -1.5 * C2tau2opt[0]
+            i_C2_upper_bound[...] = -0.5 * C2tau2opt[0]
+            i_tau2_guess[...] = C2tau2opt[1]
+            i_tau2_lower_bound[...] = min(period / 4, C2tau2opt[1] / 4)
+            i_tau2_upper_bound[...] = C2tau2opt[1] * 2
+
+        return (it_params.operands[2], it_params.operands[3], it_params.operands[4]), \
+               (it_params.operands[5], it_params.operands[6], it_params.operands[7]),
 
 
 def fit_taumodel_iteratively(data: np.ndarray, progress_report=None, **kwargs) -> Tuple[np.ndarray, np.ndarray]:
