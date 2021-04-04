@@ -135,7 +135,7 @@ def ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, med
 
     animation = FuncAnimation(fig, animation_function, fargs=mode, interval=interval, blit=False, frames=max_ti)
 
-    return animation, fig, ax, line_data, ti_indicator, line_nominal
+    return animation, fig, ax, line_data, ti_indicator, line_nominal if model else None
 
 
 def main():
@@ -198,6 +198,7 @@ def main():
             try:
                 p = input('a/r radius_index/angle_index max_time interval >> ')
             except KeyboardInterrupt:
+                print()
                 continue
             except EOFError:
                 break

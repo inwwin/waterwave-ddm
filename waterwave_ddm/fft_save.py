@@ -82,7 +82,7 @@ def main():
 
     fft_path = params.fft_out / 'fft_array'
 
-    fft_info = fft_save(video, str(fft_path), params.size, count=vid_info['frames'], kmax=params.kmax)
+    fft_info = fft_save(video, str(fft_path), params.size, count=vid_info['duration'], kmax=params.kmax)
 
     vid_info['vid_in_path'] = str(pathlib.Path(params.vid_in).resolve())
     fft_info['position'] = params.position

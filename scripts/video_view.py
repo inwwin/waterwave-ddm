@@ -33,7 +33,7 @@ def main():
 
     print(vid_info)
 
-    viewer = VideoViewer(video, vmin=0, vmax=255, count=vid_info['frames'])
+    viewer = VideoViewer(video, vmin=0, vmax=255, count=vid_info['duration'])
     viewer.show()
 
 

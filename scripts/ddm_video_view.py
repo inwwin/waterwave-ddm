@@ -18,8 +18,9 @@ import matplotlib.animation
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--vmax', type=int, default=False)
+parser.add_argument('--kmax', type=int, default=False)
 parser.add_argument('ddm_npy_path', type=pathlib.Path)
-parser.add_argument('save_html_path', type=pathlib.Path, default=False)
+parser.add_argument('save_html_path', type=pathlib.Path, default=False, nargs='?')
 params = parser.parse_args()
 
 ddm_array = np.load(params.ddm_npy_path)
@@ -31,6 +32,11 @@ imshow_kwargs = {
 interval = 1000 / 3
 
 ddm_array = np.fft.fftshift(ddm_array, axes=0)
+if params.kmax:
+    kcentre = ddm_array.shape[0] // 2
+    ddm_array = ddm_array[kcentre - params.kmax:kcentre + params.kmax + 1,
+                          :params.kmax + 1,
+                          :]
 if params.save_html_path:
     fig, ax = plt.subplots()
     fig: matplotlib.figure.Figure
