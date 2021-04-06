@@ -57,6 +57,7 @@ def main():
     # parser.add_argument('--method', default='diff', choices=['diff', 'fft', 'corr'])
     parser.add_argument('--kmax', default=None, type=int)
     parser.add_argument('-p', '--position', nargs=2, default=[0, 0], type=int)
+    parser.add_argument('-r', '--framerate', type=str, default=None)
     parser.add_argument('size', type=int)
     parser.add_argument('vid_in')  # Directly passed to PyAV which then pass on to FFmpeg
     # parser.add_argument('fft_out', type=argparse.FileType('wb'))  # pass to np.save
@@ -70,7 +71,10 @@ def main():
     except FileExistsError:
         parser.error('fft_out must be a directory')
 
-    frames_iter = pyav_single_frames_reader(params.vid_in)
+    frames_iter = pyav_single_frames_reader(
+        params.vid_in,
+        container_options={'framerate': params.framerate} if params.framerate else None
+    )
     vid_info = next(frames_iter)
     vid_info.pop('codec_context')
 
