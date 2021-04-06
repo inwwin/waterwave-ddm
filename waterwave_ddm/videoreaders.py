@@ -12,6 +12,7 @@ def pyav_single_frames_reader(*args, **kwargs):
     ===
     All are passed through to `av.open` please see https://pyav.org/docs/develop/api/_globals.html#av.open
     """
+    frame_count = kwargs.pop('frame_count', None)
     with av.open(*args, **kwargs) as container:
         container: av.container.InputContainer
         # container.streams.video[0].thread_type = 'AUTO'  # Go faster!
@@ -27,13 +28,20 @@ def pyav_single_frames_reader(*args, **kwargs):
             'height': codec.height,
             'framerate': codec.framerate,
             'duration': video.duration,  # in multiple of time_base
+            'framecount': frame_count,
             'frames': video.frames,
             'codec_context': codec,
         }
 
+        i = 0
         for frame in container.decode(video=0):
             frame: av.video.frame.VideoFrame
             # gray_frame: av.video.frame.VideoFrame
             # gray_frame = frame.reformat(format='gray')
 
+            if frame_count:
+                if i >= frame_count - 1:
+                    break
+
             yield (frame.to_ndarray(format='gray'),)
+            i += 1

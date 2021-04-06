@@ -58,6 +58,7 @@ def main():
     parser.add_argument('--kmax', default=None, type=int)
     parser.add_argument('-p', '--position', nargs=2, default=[0, 0], type=int)
     parser.add_argument('-r', '--framerate', type=str, default=None)
+    parser.add_argument('-f', '--select', nargs=2, type=int)
     parser.add_argument('size', type=int)
     parser.add_argument('vid_in')  # Directly passed to PyAV which then pass on to FFmpeg
     # parser.add_argument('fft_out', type=argparse.FileType('wb'))  # pass to np.save
@@ -71,9 +72,16 @@ def main():
     except FileExistsError:
         parser.error('fft_out must be a directory')
 
+    copt = dict()
+    if params.framerate:
+        copt['framerate'] = params.framerate
+    if params.select:
+        copt['start_number'] = str(params.select[0])
+
     frames_iter = pyav_single_frames_reader(
         params.vid_in,
-        container_options={'framerate': params.framerate} if params.framerate else None
+        container_options=copt,
+        frame_count=params.select[1] if params.select else None,
     )
     vid_info = next(frames_iter)
     vid_info.pop('codec_context')
@@ -86,7 +94,11 @@ def main():
 
     fft_path = params.fft_out / 'fft_array'
 
-    fft_info = fft_save(video, str(fft_path), params.size, count=vid_info['duration'], kmax=params.kmax)
+    if params.select:
+        frame_count = vid_info['framecount']
+    else:
+        frame_count = vid_info['duration']
+    fft_info = fft_save(video, str(fft_path), params.size, count=frame_count, kmax=params.kmax)
 
     vid_info['vid_in_path'] = str(pathlib.Path(params.vid_in).resolve())
     fft_info['position'] = params.position
