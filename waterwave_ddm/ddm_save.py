@@ -60,7 +60,7 @@ def main():
     fft_array = np.load(params.fft_in / 'fft_array_0.npy')
     acorr_info, data_lin = acorr_save(fft_array, params.ddm_out, params.method, params.mode)
 
-    print(acorr_info)
+    # print(acorr_info)
     # json not support np.ndarray and tuple
     # with open(params.ddm_out / 'acorr_info.json', 'w') as j:
     #     json.dump(acorr_info, j, indent=4)

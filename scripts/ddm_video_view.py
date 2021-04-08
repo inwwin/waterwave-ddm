@@ -17,6 +17,7 @@ import matplotlib.figure
 import matplotlib.animation
 
 parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--frames', type=int, default=256)
 parser.add_argument('--vmax', type=int, default=False)
 parser.add_argument('--kmax', type=int, default=False)
 parser.add_argument('ddm_npy_path', type=pathlib.Path)
@@ -50,11 +51,11 @@ if params.save_html_path:
         ti_indicator.set_text(f"ti = {ti}")
         return img,
 
-    animation = matplotlib.animation.FuncAnimation(fig, change_img, frames=256, blit=False, interval=interval)
+    animation = matplotlib.animation.FuncAnimation(fig, change_img, frames=params.frames, blit=False, interval=interval)
     # plt.show()
     animation.save(params.save_html_path, matplotlib.animation.HTMLWriter(fps=1000 / interval, default_mode='loop'))
 else:
     ddm_iter = [ddm_array[:, :, i] for i in range(ddm_array.shape[2])]
-    viewer = VideoViewer(ddm_iter, count=256, **imshow_kwargs)
+    viewer = VideoViewer(ddm_iter, count=params.frames, **imshow_kwargs)
     viewer.pause_duration = interval / 1000
     viewer.show()

@@ -34,6 +34,8 @@ def parse_ij(ij, ar, xy, array_shape):
     if ij:
         i = ij[0]
         j = ij[1]
+        x = j
+        y = -i
     else:
         if ar:
             af = ar[0]
@@ -49,7 +51,7 @@ def parse_ij(ij, ar, xy, array_shape):
         i = -y
     if i < 0:
         i += array_shape[0]
-    return i, j
+    return i, j, x, y
 
 
 def main():
@@ -87,12 +89,13 @@ def main():
     vprint('array_shape =', ddm_array.shape)
 
     # ddm_array = np.fft.fftshift(ddm_array, axes=0)
-    i, j = parse_ij(params.ij, params.ar, params.xy, ddm_array.shape)
+    i, j, x, y = parse_ij(params.ij, params.ar, params.xy, ddm_array.shape)
+    vprint('i, j, x, y =', (i, j, x, y))
     fit_lower_time = max(0, params.fit_lower_time)
     plot_max_time =  min(ddm_array.shape[-1], params.plot_max_time)
     fit_upper_time = min(ddm_array.shape[-1], params.fit_upper_time)
     fit_total_time = min(ddm_array.shape[-1], params.fit_total_time)
-    time_slice = slice(params.fit_lower_time, params.fit_upper_time)
+    time_slice = slice(fit_lower_time, fit_upper_time)
     vprint('fit_time_slice =', time_slice)
     fitting_data = ddm_array[i, j, time_slice]
     time_space = np.arange(fit_lower_time, fit_upper_time)
@@ -166,14 +169,14 @@ def main():
         ax.plot(ddm_array[i, j, 0:plot_max_time])
         ax.plot(time_plotting_space, fitted_model)
         ax.set_xlabel('$\\tau$ (frames)')
-        fig.suptitle(f'$q_x={j}$, $q_y={-i}$')
+        fig.suptitle(f'$q_x={x}$, $q_y={y}$')
         if params.save is None:
             plt.show()
         else:
             if params.save:
                 fig_path = params.save
             else:
-                fig_path = os.environ['FIGURE_PATH'] + f'/q_x-{j:02},q_y-{-i:02}.png'
+                fig_path = os.environ['FIGURE_PATH'] + f'/q_x-{x:02},q_y-{y:02}.png'
             fig.savefig(fig_path, dpi=300)
 
 

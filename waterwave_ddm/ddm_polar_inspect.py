@@ -151,7 +151,7 @@ def main():
     parser.add_argument('ddm_npy_path', type=pathlib.Path)
     params = parser.parse_args()
 
-    if not (params.interactive or params.out or params.animation_out):
+    if not (params.interactive or params.out):
         return
 
     ddm_array: np.ndarray = np.load(params.ddm_npy_path)
