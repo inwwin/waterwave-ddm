@@ -78,6 +78,28 @@ speed_logical = speed_physical * frame_interval / calibration['calibration_facto
 print(f'physical speed = {speed_physical} {calibration["physical_unit"]}/s')
 print(f'logical speed = {speed_logical:.4} pixels/frame')
 
+# All calculations are in SI
+air_density = 1.225
+water_density = 999.73
+g = 9.81
+water_surface_tension = 7.42e-2
+s = air_density / water_density
+A = g * (1 - s) / (1 + s)
+B = water_surface_tension / (water_density + air_density)
+c1sq = lambda k: A / k + B * k
+wind_speed = 3.
+b_ = -2 * wind_speed * s / (1 + s)
+c_ = wind_speed ** 2 * s / (1 + s)
+def freq_theory(k):
+    return .5 * k * (-b_ + np.sqrt(b_ ** 2 - 4 * (c_ - c1sq(k))))
+freq_space = np.linspace(fit_x[0], fit_x[1], 200) * wavenumber_factor
+freq_thoery_plot = freq_theory(freq_space)
+freq_thoery_plot_b = freq_theory(freq_space) + b
+freq_nowind = np.sqrt(c1sq(freq_space)) * freq_space
+group_velocity = (A + 3 * B * freq_space ** 2) / (2 * freq_nowind)
+print('vg =', np.mean(group_velocity), np.min(group_velocity), np.max(group_velocity))
+freq_group = group_velocity * freq_space
+
 tau2_physical = try2_fit[:, 3] * frame_interval
 tau2_err_physical = try2_fit[:, 7] * frame_interval
 tau2popt, tau2pcov = curve_fit(linear_func, wavenumber_space, tau2_physical,
@@ -97,6 +119,7 @@ first_damping_fit_index = 2
 dampingpopt, dampingpcov = curve_fit(linear_func,
                                      wavenumber_space_log[first_damping_fit_index:],
                                      damping_log[first_damping_fit_index:],
+                                     p0=[2., 1.],
                                      sigma=damping_log_err[first_damping_fit_index:],
                                      jac=linear_jac)
 damping_wavenum_exp, damping_wavenum_coeff_log = tuple(dampingpopt)
@@ -104,6 +127,7 @@ damping_wavenum_coeff = np.exp(damping_wavenum_coeff_log)
 damping_power_fit = damping_wavenum_coeff * np.power(wavenumber_logspace_dense, damping_wavenum_exp)
 print('damping power =', damping_wavenum_exp)
 print('damping power coeff =', damping_wavenum_coeff)
+damping_theory = 2 * 1.307e-6 * np.power(wavenumber_logspace_dense, 2)
 
 
 figwidth_cm = 22
@@ -136,6 +160,10 @@ fitted_line_kwargs = {
 axc1.axhline(c1av, **fitted_line_kwargs)
 axc2.axhline(-c2av, **fitted_line_kwargs)
 axfreq.plot(fit_wavenumber, freq_fit, **fitted_line_kwargs)
+axfreq.plot(freq_space, freq_thoery_plot)
+axfreq.plot(freq_space, freq_thoery_plot_b)
+axfreq.plot(freq_space, freq_nowind)
+axfreq.plot(freq_space, freq_group)
 axtau2.plot(fit_wavenumber, tau2_fit, **fitted_line_kwargs)
 for ax in (axfreq, axtau2):
     ax.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
@@ -154,6 +182,7 @@ for axdampingrow in axdampings:
         axdampingcell.errorbar(wavenumber_space, damping_physical, damping_err_physical,
                                fmt='_', linestyle='')
         axdampingcell.plot(wavenumber_logspace_dense, damping_power_fit)
+        axdampingcell.plot(wavenumber_logspace_dense, damping_theory)
         axdampingcell.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
         axdampingcell.set_ylabel('$\\tau_2^{-1}$ ($\\mathrm{s}^{-1}$)')
 for axdampinglogy in (axdampingsemilogy, axdampingloglog):
