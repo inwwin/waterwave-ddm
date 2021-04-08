@@ -5,7 +5,8 @@ from typing import Tuple
 from waterwave_ddm.models import polar_space, models, ISFModel
 
 
-def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_radius: float) -> \
+def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_radius: float,
+                 angle_offset: float = 0., avoid_blank_bins: bool = False) -> \
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Convert the domain of an image structure function from cartesian coordinate into polar coordinate
@@ -22,6 +23,13 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
     r, a, xm_i, xm_j = polar_space(x.shape)
     a = np.rad2deg(a)
 
+    angular_bin_size = 180.0 / angular_bins
+    assert angle_offset < angular_bin_size and angle_offset > -angular_bin_size
+    if angle_offset < 0.:
+        a[np.logical_and(a <= 90., a >= 90. + angle_offset)] -= 180
+    elif angle_offset > 0.:
+        a[np.logical_and(a >= -90., a <= -90. + angle_offset)] += 180
+
     # Results holder array
     # index 0: angle
     # index 1: radius
@@ -30,8 +38,8 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
     # result = np.empty((angular_bins, radial_bins, x.shape[-1]))
     # average_radius = np.empty((angular_bins, radial_bins))
 
-    lower_angle = np.linspace(-90.0, 90.0, angular_bins, False)
-    upper_angle = lower_angle + 180.0 / angular_bins
+    lower_angle = np.linspace(-90.0, 90.0, angular_bins, False) + angle_offset
+    upper_angle = lower_angle + angular_bin_size
     median_angle = (lower_angle + upper_angle) / 2
 
     lower_radius = np.linspace(0.0, max_radius, radial_bins, False)
@@ -68,6 +76,7 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
     assert average_angle.shape == (angular_bins, radial_bins)  # Just a sanity check
     # Similaryly initialise the result array with NaN
     result = np.full((angular_bins, radial_bins, x.shape[-1]), np.nan)
+    blank_bins = list()
 
     # average_radius[elem_exists] = \  # This idea won't work because advance indexing always return a copy
     #     np.mean(
@@ -82,9 +91,25 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
                 average_radius[ai, ri] = np.mean(r, where=mapi)
                 average_angle[ai, ri] = np.mean(a, where=mapi)
                 result[ai, ri, :] = np.mean(x, axis=(0, 1), where=mapi[..., np.newaxis])
-            # No need for else since it is already accounted for in the arrays' initialisation
+            else:
+                # Some bins don't contain any elements
+                blank_bins.append((ai, ri))
+                if avoid_blank_bins:
+                    # pick up one closest pixel to the median
+                    af = median_angle[ai]
+                    rf = median_radius[ri]
+                    xf = int(rf * np.cos(af * np.pi / 180.))
+                    yf = int(rf * np.sin(af * np.pi / 180.))
+                    j = xf
+                    i = -yf
+                    if i < 0:
+                        i += x.shape[0]
+                    average_radius[ai, ri] = r[i, j]
+                    average_angle[ai, ri] = a[i, j]
+                    result[ai, ri, :] = x[i, j, :]
 
-    return result, median_angle, median_radius, average_angle, average_radius
+    return result, median_angle, median_radius, average_angle, average_radius, \
+        lower_angle, lower_radius, upper_angle, upper_radius, blank_bins
 
 
 def ddm_polar_inspection_animation(mode, rai, average_angle, average_radius, median_angle, median_radius, ddm_polar,
@@ -157,7 +182,7 @@ def main():
     ddm_array: np.ndarray = np.load(params.ddm_npy_path)
     print('ddm_array.shape: ', ddm_array.shape)
     # ddm_array = np.fft.fftshift(ddm_array, axes=0)
-    result, median_angle, median_radius, average_angle, average_radius = \
+    result, median_angle, median_radius, average_angle, average_radius, *_ = \
         map_to_polar(ddm_array, params.angular_bins, params.radial_bin_size, ddm_array.shape[1] - 1)
     print('polar_result.shape: ', result.shape)
 
