@@ -44,7 +44,8 @@ def map_to_polar(x: np.ndarray, angular_bins: int, radial_bin_size: float, max_r
 
     lower_radius = np.linspace(0.0, max_radius, radial_bins, False)
     upper_radius = lower_radius + radial_bin_size
-    median_radius = (lower_radius + upper_radius) / 2
+    # subtract by 0.5 because we don't include the upper limit
+    median_radius = (lower_radius + upper_radius) / 2 - 0.5
 
     # Construct bin mapping array
     # index 0: angle
