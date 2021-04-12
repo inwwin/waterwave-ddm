@@ -168,7 +168,7 @@ def main():
                            params.limit[0], params.limit[1], params.radial_bin_size)
         fig.suptitle('Radial heatmap of the inverse of the coefficients of\n'
                      'the cosine decomposition of $I(q,\\tau)$ (i.e. $-C_2(q,\\Omega)$) '
-                     f'averged within the angle between ${lower_angle[params.angle_index]}\\degree$ and '
+                     f'averged within $q_\\theta$ between ${lower_angle[params.angle_index]}\\degree$ and '
                      f'${upper_angle[params.angle_index]}\\degree$')
         plt.show()
 
