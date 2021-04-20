@@ -110,7 +110,12 @@ def guess_freq(ddm_array: np.ndarray, C1: ArrayLike, max_observation: int = 3, s
             periods = cross_frames[2:] - cross_frames[:-2]
             freqs =  2 * np.pi / periods
             observations = min(max_observation, freqs.size)
-            if observations < 3:
+            if observations <= 0:
+                i_freq_guess[...]       = np.nan
+                i_freq_lower_bound[...] = np.nan
+                i_freq_upper_bound[...] = np.nan
+                continue
+            elif observations < 3:
                 warnings.warn(f'observations = {observations} < 3 may give unreliable estimate')
             ddof = 1 if observations > 1 else 0
             freq_std = np.std(freqs[:observations], ddof=ddof)
