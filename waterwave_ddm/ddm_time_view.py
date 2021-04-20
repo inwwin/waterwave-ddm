@@ -65,11 +65,25 @@ class DDMDecayCosineViewer:
         self.coord_system = 'cart'
         self.cart_i = i
         self.cart_j = j
+        self.wavevector_shape = self.ddm_array.shape[:-1]
 
         def update_input_data():
             self.fitting_data = self.ddm_array[self.cart_i, self.cart_j, self.time_slice]
             self.guessing_data = self.ddm_array[self.cart_i, self.cart_j, self.guess_time_slice]
             self.plotting_data = self.ddm_array[self.cart_i, self.cart_j, self.plot_time_slice]
+
+        def iterate():
+            if len(self.wavevector_shape) > 2:
+                # Not supporting more than 2 dimensional array
+                return None
+
+            for i in range(self.wavevector_shape[0]):
+                for j in range(self.wavevector_shape[1]):
+                    self.cart_i = i
+                    self.cart_j = j
+                    self.wavvector_index = (i, j)
+                    self.update_input_data()
+                    yield
 
         def handle_key_press(event):
             if event.key == 'h':
@@ -89,33 +103,48 @@ class DDMDecayCosineViewer:
                 self.fit_and_replot()
 
         self.update_input_data = update_input_data
+        self.iterate = iterate
         self.handle_key_press = handle_key_press
         update_input_data()
 
     def set_coord_polar(self, angle_index, radius_index, angular_bins=18, angle_offset=0., radial_bin_size=2):
         self.coord_system = 'polar'
-        self.polar_a = radius_index
+        self.polar_a = angle_index
         self.polar_r = radius_index
-        self.ddm_polar, median_angle, median_radius, average_angle, average_radius, \
+        self.ddm_polar, self.median_angle, self.median_radius, self.average_angle, self.average_radius, \
             lower_angle, lower_radius, upper_angle, upper_radius, blank_bins = \
             map_to_polar(self.ddm_array, angular_bins, radial_bin_size, self.ddm_array.shape[1] - 1,
                          angle_offset, True)
         self.vprint('ddm_polar.shape: ', self.ddm_polar.shape)
         self.vprint('blank_bins:', blank_bins)
+        self.wavevector_shape = self.ddm_polar.shape[:-1]
 
         def update_input_data():
             self.vprint('angle between:', lower_angle[self.polar_a], upper_angle[self.polar_a])
-            self.vprint('median_angle:', median_angle[self.polar_a])
+            self.vprint('median_angle:', self.median_angle[self.polar_a])
             self.vprint('radius between:', lower_radius[self.polar_r], upper_radius[self.polar_r])
-            self.vprint('median_radius:', median_radius[self.polar_r])
-            self.a_av = average_angle[self.polar_a, self.polar_r]
-            self.r_av = average_radius[self.polar_a, self.polar_r]
+            self.vprint('median_radius:', self.median_radius[self.polar_r])
+            self.a_av = self.average_angle[self.polar_a, self.polar_r]
+            self.r_av = self.average_radius[self.polar_a, self.polar_r]
             self.vprint('average_angle:', self.r_av)
             self.vprint('average_radius:', self.a_av)
 
             self.fitting_data = self.ddm_polar[self.polar_a, self.polar_r, self.time_slice]
             self.guessing_data = self.ddm_polar[self.polar_a, self.polar_r, self.guess_time_slice]
             self.plotting_data = self.ddm_polar[self.polar_a, self.polar_r, self.plot_time_slice]
+
+        def iterate():
+            if len(self.wavevector_shape) > 2:
+                # Not supporting more than 2 dimensional array
+                return None
+
+            for i in range(self.wavevector_shape[0]):
+                for j in range(self.wavevector_shape[1]):
+                    self.polar_a = i
+                    self.polar_r = j
+                    self.wavvector_index = (i, j)
+                    self.update_input_data()
+                    yield
 
         def handle_key_press(event):
             if event.key == 'h':
@@ -136,6 +165,7 @@ class DDMDecayCosineViewer:
                 self.fit_and_replot()
 
         self.update_input_data = update_input_data
+        self.iterate = iterate
         self.handle_key_press = handle_key_press
         update_input_data()
 
@@ -174,14 +204,25 @@ class DDMDecayCosineViewer:
             freq_guess, freq_lower_bound, freq_upper_bound = tuple(self.freq)
         else:
             freq_guess, freq_lower_bound, freq_upper_bound = guess_freq(self.guessing_data, C1_guess)
+            if np.isnan(freq_guess):
+                freq_guess = 1
+                freq_lower_bound = 0.00001
+                freq_upper_bound = 10
 
         if self.tau2:
             tau2_guess, tau2_lower_bound, tau2_upper_bound = tuple(self.tau2)
-            C2_guess, C2_lower_bound, C2_upper_bound = guess_C2(self.guessing_data)
+            C2_guess, C2_lower_bound, C2_upper_bound = guess_C2(C1_guess)
         else:
-            (C2_guess, C2_lower_bound, C2_upper_bound), \
-                (tau2_guess, tau2_lower_bound, tau2_upper_bound) = \
-                guess_C2_tau2(self.guessing_data, C1_guess, freq_guess)
+            try:
+                (C2_guess, C2_lower_bound, C2_upper_bound), \
+                    (tau2_guess, tau2_lower_bound, tau2_upper_bound) = \
+                    guess_C2_tau2(self.guessing_data, C1_guess, freq_guess)
+            except AssertionError:
+                C2_guess, C2_lower_bound, C2_upper_bound = guess_C2(C1_guess)
+                # Use wild guess when guessing routine failed
+                tau2_guess = 1.
+                tau2_lower_bound = 0.00001
+                tau2_upper_bound = 1000
 
         if self.c2:
             C2_guess, C2_lower_bound, C2_upper_bound = tuple(self.c2)
@@ -210,7 +251,7 @@ class DDMDecayCosineViewer:
             # 'method': 'dogbox',
         }
 
-    def fit_model(self):
+    def fit_model(self, calculate_fitted_model=True):
         if self.coord_system is None:
             raise ValueError('Please set a coordinate system before fitting model')
 
@@ -220,15 +261,16 @@ class DDMDecayCosineViewer:
         self.vprint('upper bounds = ', self.fit_kwargs['bounds'][1])
         popt, pcov = curve_fit(ydata=self.fitting_data, **self.fit_kwargs)
 
-        print('popt =         ', popt)
+        self.vprint('popt =         ', popt)
         self.popt = tuple(popt)
         self.pvar = np.diagonal(pcov, 0, -2, -1)
         self.perr = np.sqrt(self.pvar)
         # perr_frac = np.abs(perr / popt)
         self.perr_frac_total = np.sqrt(np.sum(self.pvar / np.square(popt)))
-        print('perr =         ', self.perr)
-        print(self.perr_frac_total)
-        self.fitted_model = taumodel_func(self.time_plotting_space, *self.popt)
+        self.vprint('perr =         ', self.perr)
+        self.vprint('perr_frac_total =', self.perr_frac_total)
+        if calculate_fitted_model:
+            self.fitted_model = taumodel_func(self.time_plotting_space, *self.popt)
 
         return popt, pcov, self.perr, self.perr_frac_total
 
@@ -305,6 +347,7 @@ def main():
     # upper_bounds  = [  2.1,  -0.5,   50.,   20.  ]  # noqa: E201, E202
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-nf', '--no-fit',            dest='fit', action='store_false')
     parser.add_argument('-pt', '--plot-max-time',     dest='plot_max_time',  default=np.inf,   type=int)
     parser.add_argument('-lt', '--lower-time',        dest='fit_lower_time', default=5,      type=int)
     parser.add_argument('-ut', '--upper-time',        dest='fit_upper_time', default=np.inf, type=int)
@@ -353,7 +396,7 @@ def main():
     viewer.freq = params.freq
     viewer.tau2 = params.tau2
 
-    if params.coord_system == 'cart':
+    if params.coord_system.startswith('cart'):
         i, j, x, y = parse_ij(params.ij, params.ar, params.xy, ddm_array.shape)
         vprint('initial i, j, x, y =', (i, j, x, y))
         viewer.set_coord_cartesian(i, j)
@@ -369,7 +412,10 @@ def main():
     if params.plot:
         mpl.rcParams['keymap.xscale'] = [',']
         mpl.rcParams['keymap.yscale'] = ['.']
-        viewer.fit_and_plot()
+        if params.fit:
+            viewer.fit_and_plot()
+        else:
+            viewer.plot()
         if params.save is None:
             plt.show()
         else:
