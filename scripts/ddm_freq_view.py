@@ -87,6 +87,7 @@ def main():
     d2_parser.add_argument('-a', '--angular_bins', type=int, default=18)
     d2_parser.add_argument('-ao', '--angle_offset', type=float, default=0.)
     d2_parser.add_argument('-p', '--radial_bin_size', type=int, default=2)
+    d2_parser.add_argument('-s', '--save', type=argparse.FileType('wb'), default=False)
     d2_parser.add_argument('angle_index', type=int)
     dimensions_subparsers.add_parser('3d')
     params = parser.parse_args()
@@ -170,7 +171,10 @@ def main():
                      'the cosine decomposition of $I(q,\\tau)$ (i.e. $-C_2(q,\\Omega)$) '
                      f'averged within $q_\\theta$ between ${lower_angle[params.angle_index]}\\degree$ and '
                      f'${upper_angle[params.angle_index]}\\degree$')
-        plt.show()
+        if params.save:
+            fig.savefig(params.save, dpi=300)
+        else:
+            plt.show()
 
 
 if __name__ == '__main__':
