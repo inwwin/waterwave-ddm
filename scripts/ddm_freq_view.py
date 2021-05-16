@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 import json
 import numpy as np
 # dct: Discrete Cosine Transform https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html
@@ -12,7 +13,7 @@ from waterwave_ddm.ddm_polar_inspect import map_to_polar
 
 def plot_ddm_osc_slice(ddm_osc, fig: matplotlib.figure.Figure, ax: matplotlib.axes.Axes,
                        wavenumber_factor, wavenumber_unit, freq_factor,
-                       min_signal=None, max_signal=None, radial_bin_size=1):
+                       min_signal=None, max_signal=None, radial_bin_size=1, with_colorbar=True):
     if min_signal is None:
         min_signal = np.amin(ddm_osc[1:, 1:])
     if max_signal is None:
@@ -35,9 +36,8 @@ def plot_ddm_osc_slice(ddm_osc, fig: matplotlib.figure.Figure, ax: matplotlib.ax
                              vmax=max_signal,
                              aspect='auto',
                              )
-    ax.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
-    ax.set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
-    fig.colorbar(axim_ddm_osc, ax=ax)
+    if with_colorbar:
+        fig.colorbar(axim_ddm_osc, ax=ax)
     return axim_ddm_osc
 
 
@@ -79,7 +79,8 @@ def main():
     parser.add_argument('-c', '--calibration_path', type=argparse.FileType('r'), default=False)
     parser.add_argument('-l', '--limit', nargs=2, type=float, default=[None, None])
     parser.add_argument('-t', '--max_time', type=int, default=512)
-    parser.add_argument('ddm_npy_path', type=argparse.FileType('rb'))
+    parser.add_argument('-f', '--max_freq_fraction', type=float, default=0.4)
+    parser.add_argument('ddm_npy_path', type=Path)
     dimensions_subparsers = parser.add_subparsers(dest='dimensions', required=True)
     d2i_parser = dimensions_subparsers.add_parser('2di', help='2d view, varying j, fix i')
     d2i_parser.add_argument('i', type=int, default=0)
@@ -87,19 +88,21 @@ def main():
     d2_parser.add_argument('-a', '--angular_bins', type=int, default=18)
     d2_parser.add_argument('-ao', '--angle_offset', type=float, default=0.)
     d2_parser.add_argument('-p', '--radial_bin_size', type=int, default=2)
-    d2_parser.add_argument('-s', '--save', type=argparse.FileType('wb'), default=False)
+    d2_parser.add_argument('-s', '--save', type=str, default=False)
     d2_parser.add_argument('angle_index', type=int)
     dimensions_subparsers.add_parser('3d')
     params = parser.parse_args()
 
-    ddm_array = np.load(params.ddm_npy_path)
+    ddm_array = np.load(params.ddm_npy_path, mmap_mode='r')
     print('ddm_array.shape =', ddm_array.shape)
 
     wavenumber_factor = 1
     wavenumber_unit = r'\mathrm{pixel}^{-1}'
     max_time_index = params.max_time
-    # Only view 40% of the available freq data
-    max_freq_index = int(0.4 * max_time_index)
+    # Only view 40% of the available freq data by default
+    max_freq_index = int(params.max_freq_fraction * max_time_index)
+    ddm_array = ddm_array[..., :max_time_index]
+    print('new ddm_array.shape =', ddm_array.shape)
 
     if params.vid_info_path:
         vid_info = json.load(params.vid_info_path)
@@ -116,7 +119,8 @@ def main():
         freq_factor = 1
 
     if params.dimensions == '3d' or params.dimensions == '2di':
-        ddm_dct = dct(ddm_array, type=1, n=max_time_index) / (2 * (max_time_index - 1))
+        ddm_dct = dct(ddm_array, type=1)
+        ddm_dct /= (2 * (max_time_index - 1))
         print(ddm_dct.shape)
         ddm_dct *= -1
 
@@ -144,6 +148,8 @@ def main():
             fig1.suptitle('Heatmap of the inverse of the coefficients of\n'
                           'the cosine decomposition of $I(q,\\tau)$ (i.e. $-C_2(q,\\Omega)$) '
                           f'along $q_y={qy}\\,{wavenumber_unit}$')
+            ax1.set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
+            ax1.set_xlabel(f'$q_x$ (${wavenumber_unit}$)')
             # fig.savefig(cdir + '/../plot/try2_multifreq_decomposition.png', dpi=300)
             plt.show()
 
@@ -155,26 +161,76 @@ def main():
         print('ddm_polar.shape: ', ddm_polar.shape)
         print('blank_bins:', blank_bins)
 
-        ddm_dct = dct(ddm_polar, type=1, n=max_time_index) / (2 * (max_time_index - 1))
+        ddm_dct = dct(ddm_polar, type=1)
+        ddm_dct /= (2 * (max_time_index - 1))
         print(ddm_dct.shape)
         ddm_dct *= -1
-        ddm_osc = ddm_dct[params.angle_index, :, :max_freq_index]
-        print('angle between:', lower_angle[params.angle_index], upper_angle[params.angle_index])
-        print('median angle:', median_angle[params.angle_index])
 
-        fig, ax = plt.subplots(figsize=(8., 6.))
-        fig: matplotlib.figure.Figure
-        ax: matplotlib.axes.Axes
-        plot_ddm_osc_slice(ddm_osc, fig, ax, wavenumber_factor, wavenumber_unit, freq_factor,
-                           params.limit[0], params.limit[1], params.radial_bin_size)
-        fig.suptitle('Radial heatmap of the inverse of the coefficients of\n'
-                     'the cosine decomposition of $I(q,\\tau)$ (i.e. $-C_2(q,\\Omega)$) '
-                     f'averged within $q_\\theta$ between ${lower_angle[params.angle_index]}\\degree$ and '
-                     f'${upper_angle[params.angle_index]}\\degree$')
-        if params.save:
-            fig.savefig(params.save, dpi=300)
-        else:
-            plt.show()
+        if params.angle_index >= 0:
+            ddm_osc = ddm_dct[params.angle_index, :, :max_freq_index]
+            print('angle between:', lower_angle[params.angle_index], upper_angle[params.angle_index])
+            print('median angle:', median_angle[params.angle_index])
+
+            fig, ax = plt.subplots(figsize=(8., 6.))
+            fig: matplotlib.figure.Figure
+            ax: matplotlib.axes.Axes
+            plot_ddm_osc_slice(ddm_osc, fig, ax, wavenumber_factor, wavenumber_unit, freq_factor,
+                               params.limit[0], params.limit[1], params.radial_bin_size)
+            fig.suptitle('Radial heatmap of the inverse of the coefficients of '
+                         'the cosine decomposition\nof $I(q,\\tau)$ (i.e. $-C_2(q,\\Omega)$) '
+                         f'averged within $q_\\theta$ between ${lower_angle[params.angle_index]}\\degree$ and '
+                         f'${upper_angle[params.angle_index]}\\degree$')
+            ax.set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
+            ax.set_xlabel(f'$q_r$ (${wavenumber_unit}$)')
+            if params.save:
+                fig.savefig(params.save, dpi=300)
+            else:
+                plt.show()
+        elif params.angle_index == -1:
+            fig_path = params.ddm_npy_path.with_suffix('.png')
+            fig_path: Path
+            for ai in range(ddm_dct.shape[0]):
+                ddm_osc = ddm_dct[ai, :, :max_freq_index]
+
+                fig, ax = plt.subplots(figsize=(8., 6.))
+                fig: matplotlib.figure.Figure
+                ax: matplotlib.axes.Axes
+                plot_ddm_osc_slice(ddm_osc, fig, ax, wavenumber_factor, wavenumber_unit, freq_factor,
+                                   params.limit[0], params.limit[1], params.radial_bin_size)
+                fig.suptitle('Radial heatmap of the inverse of the coefficients of '
+                             'the cosine decomposition\nof $I(q,\\tau)$ (i.e. $-C_2(q,\\Omega)$) '
+                             f'averged within $q_\\theta$ between ${lower_angle[ai]}\\degree$ and '
+                             f'${upper_angle[ai]}\\degree$')
+                custom_suffix = ('.' + params.save) if params.save else str()
+                ax.set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
+                ax.set_xlabel(f'$q_r$ (${wavenumber_unit}$)')
+                fig.savefig(fig_path.with_stem(fig_path.stem + f'{custom_suffix}.polar.freq{ai:02}'), dpi=300)
+        elif params.angle_index == -2:
+            matplotlib.rcParams.update({'font.size': 8.5})
+            fig = plt.figure(figsize=(17 / 2.54, 23.25 / 2.54), dpi=400.,
+                             constrained_layout=True)
+            gridspec = fig.add_gridspec(5, 4, hspace=2.25 / 23.25)
+            # this means we only support 18 angles only
+            grid_indices = (0,   1,
+                            4,   5,  6,  7,
+                            8,   9, 10, 11,
+                            12, 13, 14, 15,
+                            16, 17, 18, 19)
+            axs_flat = [fig.add_subplot(gridspec[i]) for i in grid_indices]
+            for ai, ax in zip(range(ddm_dct.shape[0]), axs_flat):
+                ddm_osc = ddm_dct[ai, :, :max_freq_index]
+                img = plot_ddm_osc_slice(ddm_osc, fig, ax, wavenumber_factor, wavenumber_unit, freq_factor,
+                                         params.limit[0], params.limit[1], params.radial_bin_size, False)
+                ax.set_title(f'${lower_angle[ai]:.0f}\\degree \\leq q_\\theta < {upper_angle[ai]:.0f}\\degree$',
+                             {'fontsize': 'medium'})
+            for i in (0, 2, 6, 10, 14):
+                axs_flat[i].set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
+            for i in (14, 15, 16, 17):
+                axs_flat[i].set_xlabel(f'$q_r$ (${wavenumber_unit}$)')
+            fig.colorbar(img, ax=axs_flat, shrink=0.35)
+            custom_suffix = ('.' + params.save) if params.save else str()
+            fig_path = params.ddm_npy_path.with_name(params.ddm_npy_path.stem + f'{custom_suffix}.polar.allfreq.svg')
+            fig.savefig(fig_path)
 
 
 if __name__ == '__main__':
