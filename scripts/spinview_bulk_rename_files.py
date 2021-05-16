@@ -16,6 +16,8 @@ def main():
     parser.add_argument('summary_out', type=str)
     params = parser.parse_args()
 
+    paths = sorted(Path('.').glob(params.glob))
+
     if params.dry:
         csv_file = sys.stdout
     else:
@@ -31,18 +33,21 @@ def main():
     timedelta_threshold = timedelta(seconds=5)
     previous_capture_group = None
     previous_capture_time = None
-    paths = sorted(Path('.').glob(params.glob))
 
     if params.dry:
         new_paths = set()
         duplicate_new_paths = set()
 
     for path in paths:
+        path: Path
         match = pattern.match(path.stem)
+        if not match:
+            continue
         new_index = match.group(4).zfill(params.indexlength)
+        new_suffix = path.suffix.lower()
 
         capture_group = match.group(1)
-        capture_time = datetime.strptime(match.group(2), '%d%m%Y%H%M%S')
+        capture_time = datetime.strptime(match.group(2), '%m%d%Y%H%M%S')
         if previous_capture_group != capture_group:
             capture_subgroup = 0
             previous_capture_group = capture_group
@@ -59,7 +64,7 @@ def main():
 
         capture_subgroup_str = str(capture_subgroup).zfill(2)
         csv_writer.writerow((capture_group, capture_subgroup_str, new_index, match.group(2)))
-        new_path = path.with_stem(capture_group + '-' + capture_subgroup_str + '_' + new_index)
+        new_path = path.with_name(capture_group + '-' + capture_subgroup_str + '_' + new_index + new_suffix)
 
         if params.dry:
             print(new_path)
