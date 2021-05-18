@@ -165,6 +165,7 @@ def main():
         ddm_dct /= (2 * (max_time_index - 1))
         print(ddm_dct.shape)
         ddm_dct *= -1
+        ddm_dct[..., 0] = np.nan
 
         if params.angle_index >= 0:
             ddm_osc = ddm_dct[params.angle_index, :, :max_freq_index]
@@ -227,7 +228,7 @@ def main():
                 axs_flat[i].set_ylabel('$\\Omega$ (rad $\\mathrm{s}^{-1}$)')
             for i in (14, 15, 16, 17):
                 axs_flat[i].set_xlabel(f'$q_r$ (${wavenumber_unit}$)')
-            fig.colorbar(img, ax=axs_flat, shrink=0.35)
+            fig.colorbar(img, ax=axs_flat, shrink=0.35, extend='max')
             custom_suffix = ('.' + params.save) if params.save else str()
             fig_path = params.ddm_npy_path.with_name(params.ddm_npy_path.stem + f'{custom_suffix}.polar.allfreq.svg')
             fig.savefig(fig_path)

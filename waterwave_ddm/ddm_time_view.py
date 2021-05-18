@@ -362,7 +362,7 @@ def main():
     plot_parser.add_argument('-s', '--save', nargs='?', default=None, const=False,
                              type=argparse.FileType('wb'), metavar='fig_out')
     plot_parser.add_argument('-np', '--noplot', dest='plot', action='store_false')
-    parser.add_argument('ddm_npy_path', type=argparse.FileType('rb'))
+    parser.add_argument('ddm_npy_path', type=str)
     coord_subparsers = parser.add_subparsers(title='coord', required=True, dest='coord_system')
     cartesian_parser = coord_subparsers.add_parser('cartesian', aliases=['cart'])
     cart_group = cartesian_parser.add_mutually_exclusive_group(required=True)
@@ -378,7 +378,7 @@ def main():
 
     params = parser.parse_args()
     vprint = verbose_print_wrapper(params.verbose)
-    ddm_array = np.load(params.ddm_npy_path)
+    ddm_array = np.load(params.ddm_npy_path, mmap_mode='r+')
     vprint('array_shape =', ddm_array.shape)
 
     viewer = DDMDecayCosineViewer(

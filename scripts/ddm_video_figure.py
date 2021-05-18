@@ -12,6 +12,7 @@ from matplotlib.patches import FancyBboxPatch
 parser = argparse.ArgumentParser()
 parser.add_argument('-vinfo', '--vid_info_path', type=argparse.FileType('r'), nargs=2, required=True)
 parser.add_argument('-c', '--calibration_path', type=argparse.FileType('r'), required=True)
+parser.add_argument('--vmin', type=float, default=0.)
 parser.add_argument('--vmax', type=float, required=True)
 parser.add_argument('--kmax', type=int, nargs=4, required=True)
 parser.add_argument('ddm_npy_path', type=pathlib.Path, nargs=2)
@@ -56,7 +57,7 @@ for axsrow, frame_indices, kmax, ddm_datum, row_name in \
                               :kmax + 1]
         wavenumber_factor = ddm_datum['wavenumber_factor']
         imshow_kwargs = {
-            'vmin': 0,
+            'vmin': params.vmin,
             'vmax': params.vmax,
             'extent': (
                 -0.5 * wavenumber_factor,
